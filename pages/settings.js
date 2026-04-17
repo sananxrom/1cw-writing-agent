@@ -276,6 +276,17 @@ export default function Settings() {
                   <option>German</option>
                   <option>Arabic</option>
                 </select>
+
+                <div style={{ marginTop: 20 }}>
+                  <FieldLabel>Batch Delay (ms between articles)</FieldLabel>
+                  <input type="number" min="0" max="5000" step="100"
+                    value={settings.batchDelay ?? 600}
+                    onChange={e => setSettings(p => ({ ...p, batchDelay: parseInt(e.target.value) }))}
+                    style={{ ...inputStyle, width: 120 }} />
+                  <div style={{ fontSize: 11, color: '#9c9a92', marginTop: 4 }}>
+                    Delay between items in batch generation to avoid rate limits. 500-1000ms recommended.
+                  </div>
+                </div>
               </div>
             )}
 
