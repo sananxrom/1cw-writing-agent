@@ -88,7 +88,44 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
     setUploadLoading(false)
   }
 
+  // Check for blank critical fields
+  function getWarnings() {
+    const w = []
+    if (!article.title?.trim()) w.push('Title')
+    if (!article.body?.trim()) w.push('Body')
+    if (!article.primaryCategory) w.push('Primary Category')
+    if (!article.seoTitle?.trim()) w.push('SEO Title')
+    if (!article.metaDescription?.trim()) w.push('Meta Description')
+    if (!article.slug?.trim()) w.push('Slug')
+    return w
+  }
+
+  function handleLocalSave() {
+    try {
+      const key = '1cw_local_' + (article.slug || Date.now())
+      localStorage.setItem(key, JSON.stringify({ ...article, savedAt: Date.now() }))
+      setSaveMsg('Saved locally ✓ (not sent to WordPress)')
+      setTimeout(() => setSaveMsg(''), 3000)
+    } catch (err) {
+      setSaveMsg('Local save failed: ' + err.message)
+    }
+  }
+
+  const [showWarnings, setShowWarnings] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState(null)
+
+  function handleSaveClick(status) {
+    const warnings = getWarnings()
+    if (warnings.length > 0) {
+      setPendingStatus(status)
+      setShowWarnings(true)
+    } else {
+      handleSave(status)
+    }
+  }
+
   const handleSave = async (status = 'draft') => {
+    setShowWarnings(false)
     setSaving(true)
     setSaveMsg('')
     try {
@@ -140,7 +177,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
         url: post.link,
       })
 
-      if (onSaved) onSaved(post)
+      if (onSaved) onSaved(post, article)
     } catch (err) {
       setSaveMsg('Error: ' + err.message)
     }
@@ -170,6 +207,24 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Warnings modal */}
+      {showWarnings && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fdfcf9', borderRadius: 12, padding: 28, maxWidth: 420, width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 20, color: '#0d0d0d', marginBottom: 12 }}>Fields missing</div>
+            <div style={{ fontSize: 13, color: '#5c5b57', marginBottom: 16 }}>
+              The following fields are empty:
+              <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                {getWarnings().map(w => <li key={w} style={{ color: '#c0271e', fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{w}</li>)}
+              </ul>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Btn variant="ghost" onClick={() => { setShowWarnings(false); setPendingStatus(null) }}>Go back</Btn>
+              <Btn variant="accent" onClick={() => handleSave(pendingStatus)}>Proceed anyway</Btn>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Top toolbar */}
       <div style={{ background: '#fdfcf9', borderBottom: '1px solid #dedad2', padding: '0 20px', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -182,10 +237,10 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('Error') ? '#c0271e' : '#1a7a45', fontFamily: "'DM Mono', monospace" }}>{saveMsg}</span>}
-          <Btn variant="secondary" size="sm" onClick={() => handleSave('draft')} disabled={saving}>
+          <Btn variant="secondary" size="sm" onClick={() => handleSaveClick('draft')} disabled={saving}>
             {saving ? <Spinner size={12} /> : ''}Save Draft
           </Btn>
-          <Btn variant="accent" size="sm" onClick={() => handleSave('publish')} disabled={saving}>
+          <Btn variant="accent" size="sm" onClick={() => handleSaveClick('publish')} disabled={saving}>
             Publish to 1cw.org
           </Btn>
         </div>
@@ -574,12 +629,15 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 10 }}>
-              <Btn variant="secondary" size="lg" onClick={() => handleSave('draft')} disabled={saving}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <Btn variant="ghost" size="lg" onClick={handleLocalSave} disabled={saving}>
+                💾 Save Here
+              </Btn>
+              <Btn variant="secondary" size="lg" onClick={() => handleSaveClick('draft')} disabled={saving}>
                 {saving ? <Spinner size={14} /> : ''}
                 {article.wpPostId ? 'Update Draft' : 'Save as Draft'}
               </Btn>
-              <Btn variant="accent" size="lg" onClick={() => handleSave('publish')} disabled={saving}>
+              <Btn variant="accent" size="lg" onClick={() => handleSaveClick('publish')} disabled={saving}>
                 Publish Now
               </Btn>
             </div>
