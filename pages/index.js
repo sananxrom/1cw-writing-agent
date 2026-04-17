@@ -55,9 +55,10 @@ export default function Discover() {
   async function generateSelected() {
     if (!selected.length) return
     const settings = storage.getSettings()
+    const batchDelay = settings.batchDelay ?? 600
     setGenerating(true)
 
-    for (const link of selected) {
+    for (const [batchIndex, link] of selected.entries()) {
       const item = allItems.find(i => i.link === link)
       if (!item) continue
       const src = sources.find(s => s.id === item.sourceId)
@@ -87,9 +88,9 @@ export default function Discover() {
           authorStyle: authorObj?.style || '',
           postFormat: src?.postFormat || 'standard',
           mode: 'rewrite',
-        })
+        }, { batchIndex, batchDelay })
 
-        // Mark as seen
+        // Mark as seen (localStorage fallback — DB handled server-side)
         storage.addSeenUrl(item.link)
 
         setGenerating(false)
