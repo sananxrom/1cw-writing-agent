@@ -17,10 +17,15 @@ export default function Discover() {
   const [activeSource, setActiveSource] = useState('all')
 
   useEffect(() => {
-    const s = storage.getSources().filter(s => s.type === 'rss' && s.active)
-    setSources(s)
-    // Auto-fetch all active sources
-    s.forEach(src => loadSource(src))
+    function init() {
+      const s = storage.getSources().filter(s => s.type === 'rss' && s.active)
+      setSources(s)
+      setFeedItems({})
+      s.forEach(src => loadSource(src))
+    }
+    init()
+    document.addEventListener('visibilitychange', init)
+    return () => document.removeEventListener('visibilitychange', init)
   }, [])
 
   async function loadSource(src) {
@@ -134,7 +139,7 @@ export default function Discover() {
         subtitle={`${allItems.length} articles`}
         actions={
           <>
-            <Btn variant="secondary" size="sm" onClick={() => sources.forEach(s => loadSource(s))}>
+            <Btn variant="secondary" size="sm" onClick={() => { const s = storage.getSources().filter(s => s.type === 'rss' && s.active); setSources(s); setFeedItems({}); s.forEach(src => loadSource(src)) }}>
               {isLoading ? <Spinner size={12} /> : ''}Refresh
             </Btn>
             {selected.length > 0 && (
