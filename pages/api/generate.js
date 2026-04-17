@@ -87,7 +87,7 @@ Return ONLY valid JSON (no markdown, no backticks, no explanation) with exactly 
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         max_tokens: 4000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
@@ -158,7 +158,7 @@ Return ONLY valid JSON with a single key "${field}" and its new value. No markdo
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         max_tokens: 1000,
         messages: [{ role: 'user', content: prompt }],
       }),
