@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #0d0d0d;
+  --ink2: #2e2e2b;
+  --ink3: #5c5b57;
+  --ink4: #9c9a92;
+  --bg: #f5f3ee;
+  --bg2: #edeae3;
+  --white: #fdfcf9;
+  --accent: #c8440a;
+  --border: #dedad2;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Sora', sans-serif;
+  background: var(--bg);
+  color: var(--ink2);
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+.prose-editor {
+  min-height: 400px;
+  outline: none;
+  font-family: 'Sora', sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink2);
+}
+
+.prose-editor h2 { font-size: 20px; font-weight: 600; margin: 20px 0 10px; }
+.prose-editor h3 { font-size: 17px; font-weight: 500; margin: 16px 0 8px; }
+.prose-editor p { margin-bottom: 12px; }
+.prose-editor ul, .prose-editor ol { padding-left: 20px; margin-bottom: 12px; }
+.prose-editor li { margin-bottom: 4px; }
+.prose-editor strong { font-weight: 600; }
