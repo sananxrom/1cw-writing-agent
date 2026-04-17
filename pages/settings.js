@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { Btn, Badge, Toggle, Spinner, Topbar } from '../components/UI'
-import { storage, DEFAULT_SOURCES } from '../lib/storage'
+import { storage, DEFAULT_SOURCES, DEFAULT_AI_PROVIDERS, PROVIDER_MODELS } from '../lib/storage'
 import { wpRequest } from '../lib/api'
 
 const ALL_CATEGORIES = [
@@ -18,6 +18,9 @@ export default function Settings() {
   const [settings, setSettings] = useState({})
   const [sources, setSources] = useState([])
   const [authors, setAuthors] = useState([])
+  const [aiProviders, setAIProviders] = useState(DEFAULT_AI_PROVIDERS)
+  const [testingProvider, setTestingProvider] = useState({})
+  const [testProviderResult, setTestProviderResult] = useState({})
   const [testing, setTesting] = useState({})
   const [testResult, setTestResult] = useState({})
   const [saved, setSaved] = useState(false)
@@ -30,14 +33,43 @@ export default function Settings() {
     setSources(storage.getSources())
     setAuthors(storage.getAuthors())
     setWpCache(storage.getWPCache())
+    setAIProviders(storage.getAIProviders())
   }, [])
 
   function saveAll() {
     storage.setSettings(settings)
     storage.setSources(sources)
     storage.setAuthors(authors)
+    storage.setAIProviders(aiProviders)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  async function testProvider(task) {
+    const cfg = aiProviders[task]
+    if (!cfg?.apiKey) {
+      setTestProviderResult(p => ({ ...p, [task]: '✗ No API key entered' }))
+      return
+    }
+    setTestingProvider(p => ({ ...p, [task]: true }))
+    setTestProviderResult(p => ({ ...p, [task]: '' }))
+    try {
+      const r = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: 'Test', title: 'Test', mode: 'create',
+          primaryCategory: 'Artificial Intelligence', writingPrompt: 'One sentence.',
+          provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey,
+        }),
+      })
+      const d = await r.json()
+      if (d.title) setTestProviderResult(p => ({ ...p, [task]: '✓ Working!' }))
+      else throw new Error(d.error || 'No response')
+    } catch (err) {
+      setTestProviderResult(p => ({ ...p, [task]: `✗ ${err.message.slice(0, 80)}` }))
+    }
+    setTestingProvider(p => ({ ...p, [task]: false }))
   }
 
   async function testWP() {
@@ -75,8 +107,8 @@ export default function Settings() {
     setTesting(p => ({ ...p, anthropic: false }))
   }
 
-  const SECTIONS = ['wordpress', 'apikeys', 'writing', 'authors', 'sources']
-  const SECTION_LABELS = { wordpress: 'WordPress', apikeys: 'API Keys', writing: 'Writing Style', authors: 'Authors', sources: 'Sources' }
+  const SECTIONS = ['wordpress', 'aiproviders', 'writing', 'authors', 'sources']
+  const SECTION_LABELS = { wordpress: 'WordPress', aiproviders: 'AI Providers', writing: 'Writing Style', authors: 'Authors', sources: 'Sources' }
 
   return (
     <Layout>
@@ -151,28 +183,74 @@ export default function Settings() {
               </div>
             )}
 
-            {/* API KEYS */}
-            {activeSection === 'apikeys' && (
+            {/* AI PROVIDERS */}
+            {activeSection === 'aiproviders' && (
               <div>
-                <SectionTitle>API Keys</SectionTitle>
-                <div style={{ background: '#fff8f5', border: '1px solid #f5c4a8', borderRadius: 8, padding: 14, marginBottom: 20, fontSize: 13, color: '#5c5b57' }}>
-                  All API keys are stored as Vercel environment variables, never in the browser. To update a key, go to your Vercel project → Settings → Environment Variables.
+                <SectionTitle>AI Providers</SectionTitle>
+                <div style={{ background: '#fff8f5', border: '1px solid #f5c4a8', borderRadius: 8, padding: 14, marginBottom: 24, fontSize: 13, color: '#5c5b57' }}>
+                  API keys are stored locally in your browser — never sent to any server except the AI provider directly. Configure a provider and model for each task below.
                 </div>
-                <div>
-                  <Btn variant="secondary" onClick={testAnthropicKey} disabled={testing.anthropic}>
-                    {testing.anthropic ? <Spinner size={12} /> : ''}Test Anthropic API
-                  </Btn>
-                  {testResult.anthropic && (
-                    <div style={{ marginTop: 8, fontSize: 13, fontFamily: "'DM Mono', monospace", color: testResult.anthropic.startsWith('✓') ? '#1a7a45' : '#c0271e' }}>
-                      {testResult.anthropic}
+
+                {[
+                  { task: 'writing', label: 'Writing', desc: 'Generates full articles from sources or topics' },
+                  { task: 'editing', label: 'Editing / Regen', desc: 'Regenerates individual fields in the article editor' },
+                  { task: 'scraping', label: 'Web Research', desc: 'Used when scraping URLs (Perplexity recommended for live web data)' },
+                ].map(({ task, label, desc }) => {
+                  const cfg = aiProviders[task] || {}
+                  const models = PROVIDER_MODELS[cfg.provider] || []
+                  return (
+                    <div key={task} style={{ background: '#fdFCf9', border: '1px solid #dedad2', borderRadius: 10, padding: 18, marginBottom: 16 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#0d0d0d', marginBottom: 2 }}>{label}</div>
+                          <div style={{ fontSize: 11, color: '#9c9a92', fontFamily: "'DM Mono', monospace" }}>{desc}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {testProviderResult[task] && (
+                            <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: testProviderResult[task].startsWith('✓') ? '#1a7a45' : '#c0271e' }}>
+                              {testProviderResult[task]}
+                            </span>
+                          )}
+                          <Btn variant="secondary" size="sm" onClick={() => testProvider(task)} disabled={testingProvider[task]}>
+                            {testingProvider[task] ? <Spinner size={10} /> : ''}Test
+                          </Btn>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                        <div>
+                          <FieldLabel>Provider</FieldLabel>
+                          <select
+                            value={cfg.provider || 'anthropic'}
+                            onChange={e => setAIProviders(prev => ({ ...prev, [task]: { ...cfg, provider: e.target.value, model: (PROVIDER_MODELS[e.target.value] || [])[0] || '' } }))}
+                            style={selectStyle}>
+                            <option value="anthropic">Anthropic (Claude)</option>
+                            <option value="openai">OpenAI (ChatGPT)</option>
+                            <option value="perplexity">Perplexity</option>
+                          </select>
+                        </div>
+                        <div>
+                          <FieldLabel>Model</FieldLabel>
+                          <select
+                            value={cfg.model || ''}
+                            onChange={e => setAIProviders(prev => ({ ...prev, [task]: { ...cfg, model: e.target.value } }))}
+                            style={selectStyle}>
+                            {models.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <FieldLabel>API Key</FieldLabel>
+                        <input
+                          type="password"
+                          value={cfg.apiKey || ''}
+                          onChange={e => setAIProviders(prev => ({ ...prev, [task]: { ...cfg, apiKey: e.target.value } }))}
+                          placeholder={`${cfg.provider === 'anthropic' ? 'sk-ant-...' : cfg.provider === 'openai' ? 'sk-...' : 'pplx-...'}`}
+                          style={{ ...inputStyle, fontFamily: "'DM Mono', monospace" }}
+                        />
+                      </div>
                     </div>
-                  )}
-                </div>
-                <div style={{ marginTop: 16 }}>
-                  <a href="https://vercel.com/sananxroms-projects/1cw-writing-agent/settings/environment-variables" target="_blank" rel="noopener noreferrer">
-                    <Btn variant="secondary">Open Vercel Environment Variables →</Btn>
-                  </a>
-                </div>
+                  )
+                })}
               </div>
             )}
 
