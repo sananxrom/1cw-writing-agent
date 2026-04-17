@@ -1,5 +1,6 @@
 // pages/api/generate.js
-// Generate full article using Claude API server-side
+// Supports multiple AI providers: anthropic, openai, perplexity
+// API keys passed from frontend (stored in browser localStorage, never in env)
 
 const ALL_CATEGORIES = [
   'Artificial Intelligence', 'XR, VR, AR – XROM', 'Blockchain',
@@ -14,30 +15,61 @@ const REGION_TAGS = [
   'China', 'Latin America', 'Middle East & Africa',
 ]
 
+const PROVIDERS = {
+  anthropic: {
+    url: 'https://api.anthropic.com/v1/messages',
+    defaultModel: 'claude-sonnet-4-5',
+  },
+  openai: {
+    url: 'https://api.openai.com/v1/chat/completions',
+    defaultModel: 'gpt-4o',
+  },
+  perplexity: {
+    url: 'https://api.perplexity.ai/chat/completions',
+    defaultModel: 'llama-3.1-sonar-large-128k-online',
+  },
+}
+
+async function callAI({ provider, model, apiKey, system, user, maxTokens = 4000 }) {
+  const cfg = PROVIDERS[provider] || PROVIDERS.anthropic
+  const resolvedModel = model || cfg.defaultModel
+  let url, headers, body
+
+  if (provider === 'anthropic') {
+    url = cfg.url
+    headers = { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
+    body = JSON.stringify({ model: resolvedModel, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] })
+  } else {
+    url = cfg.url
+    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }
+    body = JSON.stringify({ model: resolvedModel, max_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] })
+  }
+
+  const r = await fetch(url, { method: 'POST', headers, body })
+  if (!r.ok) {
+    const err = await r.text()
+    throw new Error(`${provider} API error: ${r.status} — ${err.slice(0, 300)}`)
+  }
+  const data = await r.json()
+  if (provider === 'anthropic') return data.content[0].text
+  return data.choices[0].message.content
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return res.status(500).json({ error: 'Anthropic API key not configured' })
-
   const {
-    content,        // raw article content / transcript
-    title,          // source title hint
-    sourceUrl,      // original URL
-    sourceName,     // publication name
-    primaryCategory, // suggested from source config
-    writingPrompt,  // source or global writing style
-    authorStyle,    // author voice description
-    postFormat,     // standard/video/audio/gallery
-    mode,           // 'rewrite' | 'youtube' | 'create'
-    regenerateField, // if regenerating single field
-    regenerateInstruction, // user instruction for regen
-    currentArticle, // current article state for regen
+    content, title, sourceUrl, sourceName, primaryCategory,
+    writingPrompt, authorStyle, postFormat, mode,
+    regenerateField, regenerateInstruction, currentArticle,
+    provider = 'anthropic', model, apiKey,
   } = req.body
 
-  // Single field regeneration
+  const resolvedKey = apiKey || process.env.ANTHROPIC_API_KEY
+  if (!resolvedKey) return res.status(500).json({ error: 'No API key provided. Add one in Settings → AI Providers.' })
+
   if (regenerateField && currentArticle) {
-    return handleRegenerate(res, apiKey, regenerateField, regenerateInstruction, currentArticle, writingPrompt)
+    return handleRegenerate(res, { provider, model, apiKey: resolvedKey }, regenerateField, regenerateInstruction, currentArticle, writingPrompt)
   }
 
   const systemPrompt = `You are a professional content editor for 1CW (1cw.org), a technology news publication covering future tech, science, and innovation.
@@ -63,112 +95,50 @@ ${(content || '').slice(0, 5000)}
 Return ONLY valid JSON (no markdown, no backticks, no explanation) with exactly these fields:
 {
   "title": "compelling headline",
-  "tagline": "one punchy subheadline sentence expanding on the title",
+  "tagline": "one punchy subheadline sentence",
   "body": "full article in clean HTML using <p><h2><h3><ul><li><strong> tags only",
-  "excerpt": "2-3 sentence summary for article preview",
+  "excerpt": "2-3 sentence summary",
   "seoTitle": "SEO title 50-60 chars",
   "metaDescription": "meta description 140-155 chars",
   "focusKeyword": "primary SEO keyword phrase",
   "slug": "url-slug-with-hyphens",
   "primaryCategory": "exact category name from the available list",
-  "additionalCategories": ["up to 2 more exact category names"],
-  "regionTags": ["relevant region tags from the list only, empty if none"],
+  "additionalCategories": [],
+  "regionTags": [],
   "keywordTags": ["4 to 6 specific SEO keyword tags"],
   "enableToc": false,
   "postFormat": "${postFormat || 'standard'}"
 }`
 
   try {
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    })
-
-    if (!claudeRes.ok) {
-      const err = await claudeRes.text()
-      return res.status(500).json({ error: `Claude API error: ${claudeRes.status}`, details: err })
-    }
-
-    const claudeData = await claudeRes.json()
-    const raw = claudeData.content[0].text
-
-    // Parse JSON safely
+    const raw = await callAI({ provider, model, apiKey: resolvedKey, system: systemPrompt, user: userPrompt })
     const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
     const article = JSON.parse(cleaned)
-
-    // Calculate word count
-    const wordCount = (article.body || '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .split(' ')
-      .filter(Boolean).length
-
-    return res.status(200).json({
-      ...article,
-      wordCount,
-      sourceUrl: sourceUrl || '',
-      sourceName: sourceName || '',
-    })
+    const wordCount = (article.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length
+    return res.status(200).json({ ...article, wordCount, sourceUrl: sourceUrl || '', sourceName: sourceName || '' })
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }
 }
 
-async function handleRegenerate(res, apiKey, field, instruction, article, writingPrompt) {
+async function handleRegenerate(res, { provider, model, apiKey }, field, instruction, article, writingPrompt) {
   const fieldDescriptions = {
-    title: 'article title (headline)',
-    tagline: 'tagline (one-sentence subheadline)',
-    excerpt: 'excerpt (2-3 sentence summary)',
-    seoTitle: 'SEO title (50-60 chars)',
-    metaDescription: 'meta description (140-155 chars)',
-    focusKeyword: 'focus keyword phrase',
-    keywordTags: 'keyword tags array (4-6 specific tags)',
-    body: 'article body in clean HTML',
+    title: 'article title (headline)', tagline: 'tagline (one-sentence subheadline)',
+    excerpt: 'excerpt (2-3 sentence summary)', seoTitle: 'SEO title (50-60 chars)',
+    metaDescription: 'meta description (140-155 chars)', focusKeyword: 'focus keyword phrase',
+    keywordTags: 'keyword tags array (4-6 specific tags)', body: 'article body in clean HTML',
   }
-
   const prompt = `You are editing an article for 1CW (1cw.org).
 Writing style: ${writingPrompt || 'Clear, authoritative, conversational.'}
-
-Current article:
-Title: ${article.title}
+Current article title: ${article.title}
 Body summary: ${(article.body || '').replace(/<[^>]+>/g, ' ').slice(0, 500)}
-
 Task: Regenerate ONLY the "${field}" field (${fieldDescriptions[field] || field}).
 User instruction: "${instruction || 'Improve it'}"
-
 Return ONLY valid JSON with a single key "${field}" and its new value. No markdown, no explanation.`
-
   try {
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    })
-
-    const claudeData = await claudeRes.json()
-    const raw = claudeData.content[0].text
+    const raw = await callAI({ provider, model, apiKey, system: 'You are a content editor. Return only JSON.', user: prompt, maxTokens: 1000 })
     const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    const result = JSON.parse(cleaned)
-    return res.status(200).json(result)
+    return res.status(200).json(JSON.parse(cleaned))
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }
