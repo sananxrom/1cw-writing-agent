@@ -94,6 +94,20 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
     try {
       const cache = storage.getWPCache()
 
+      // Auto-upload featured image to WP if we have a URL but no ID yet
+      let featuredImageId = article.featuredImageId
+      if (!featuredImageId && article.featuredImageUrl && !article.featuredImageUrl.startsWith('data:')) {
+        setSaveMsg('Uploading featured image…')
+        try {
+          const uploaded = await uploadImageToWP(article.featuredImageUrl, null, article.title)
+          featuredImageId = uploaded.id
+          set('featuredImageId', uploaded.id)
+          set('featuredImageUrl', uploaded.url)
+        } catch (imgErr) {
+          console.warn('Image upload failed (non-fatal):', imgErr.message)
+        }
+      }
+
       // Resolve categories
       const allCats = [article.primaryCategory, ...(article.additionalCategories || [])].filter(Boolean)
       const categoryIds = await resolveCategoryIds(allCats, cache.categories)
@@ -109,7 +123,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
 
       const post = await saveToWordPress(
         { ...article, status },
-        { categoryIds, tagIds, authorId, featuredImageId: article.featuredImageId }
+        { categoryIds, tagIds, authorId, featuredImageId }
       )
 
       set('wpPostId', post.id)
