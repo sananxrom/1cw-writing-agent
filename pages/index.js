@@ -192,6 +192,53 @@ export default function Discover() {
     } finally { generatingRef.current = false }
   }
 
+  function cancelGenerating(url) {
+    setGenerated(prev => prev.map(g =>
+      (g.item?.url || g.item?.link) === url && g.status === 'generating'
+        ? { ...g, status: 'error', error: 'Cancelled' }
+        : g
+    ))
+  }
+
+  async function retryGeneration(url) {
+    const g = generated.find(x => (x.item?.url || x.item?.link) === url)
+    if (!g) return
+    const item = pulled.find(i => i.url === url) || g.item
+    if (!item) return
+    // Reset to generating
+    setGenerated(prev => prev.map(x =>
+      (x.item?.url || x.item?.link) === url ? { ...x, status: 'generating', error: null, generatedAt: Date.now() } : x
+    ))
+    const settings = storage.getSettings()
+    const src = sources.find(s => s.id === item.sourceId)
+    try {
+      let content = item.content || item.summary || ''
+      try {
+        const scraped = await scrapeArticle(item.url || url)
+        if (scraped.text?.length > content.length) content = scraped.text
+        if (!item.image && scraped.image) item.image = scraped.image
+      } catch {}
+      const authorObj = storage.getAuthors().find(a => a.id === src?.defaultAuthor)
+      const article = await generateArticle({
+        content, title: item.title, sourceUrl: item.url || url,
+        sourceName: item.sourceName || src?.name,
+        primaryCategory: src?.primaryCategory,
+        writingPrompt: src?.writingPrompt || settings.globalWritingPrompt,
+        authorStyle: authorObj?.style || '',
+        postFormat: src?.postFormat || 'standard', mode: 'rewrite',
+      })
+      const full = { ...article, featuredImageUrl: item.image || '', sourceUrl: item.url || url, sourceName: item.sourceName || src?.name }
+      fullArticles.current[url] = full
+      setGenerated(prev => prev.map(x =>
+        (x.item?.url || x.item?.link) === url ? { ...x, article: full, status: 'done' } : x
+      ))
+    } catch (err) {
+      setGenerated(prev => prev.map(x =>
+        (x.item?.url || x.item?.link) === url ? { ...x, status: 'error', error: err.message.slice(0, 120) } : x
+      ))
+    }
+  }
+
   function openEditor(url) {
     const g = generated.find(x => (x.item?.url || x.item?.link) === url)
     if (!g?.article) return
@@ -388,6 +435,8 @@ export default function Discover() {
                       onEdit={() => openEditor(url)}
                       onQuickSave={status => quickSave([url], status)}
                       onDelete={() => askDelete([url], 'generated')}
+                      onCancel={() => cancelGenerating(url)}
+                      onRetry={() => retryGeneration(url)}
                     />
                   )
                 })
@@ -404,6 +453,8 @@ export default function Discover() {
             <GeneratedPreview g={selectedItem}
               onEdit={() => openEditor(selectedItem.item?.url || selectedItem.item?.link)}
               onQuickSave={status => quickSave([selectedItem.item?.url || selectedItem.item?.link], status)}
+              onCancel={() => cancelGenerating(selectedItem.item?.url || selectedItem.item?.link)}
+              onRetry={() => retryGeneration(selectedItem.item?.url || selectedItem.item?.link)}
             />
           )}
           {!selectedItem && <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 13 }}>Select an article to preview</div>}
@@ -477,7 +528,7 @@ function PulledRow({ item, selected, checked, queued, onClick, onCheck, onGenera
 }
 
 // ── Generated row ────────────────────────────────────────
-function GeneratedRow({ g, selected, checked, onClick, onCheck, onEdit, onQuickSave, onDelete }) {
+function GeneratedRow({ g, selected, checked, onClick, onCheck, onEdit, onQuickSave, onDelete, onCancel, onRetry }) {
   const [hover, setHover] = useState(false)
   const isDone = g.status === 'done'
   const url = g.item?.url || g.item?.link
@@ -532,14 +583,24 @@ function GeneratedRow({ g, selected, checked, onClick, onCheck, onEdit, onQuickS
           </div>
         )}
       </div>
-      {isDone && (hover || selected) && (
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
-          <Tip label="Edit"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onEdit() }}><I name="edit" size={12} /></Btn></Tip>
-          {!g.article?.wpStatus && <Tip label="Save as draft"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onQuickSave('draft') }}><I name="copy" size={12} /></Btn></Tip>}
-          <Tip label="Publish"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onQuickSave('publish') }}><I name="wordpress" size={12} color="var(--accent)" /></Btn></Tip>
+      <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
+        {g.status === 'generating' && (
+          <Tip label="Cancel"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onCancel?.() }}><I name="x" size={12} color="var(--danger)" /></Btn></Tip>
+        )}
+        {g.status === 'error' && (
+          <Tip label="Retry"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onRetry?.() }}><I name="refresh" size={12} color="var(--accent)" /></Btn></Tip>
+        )}
+        {isDone && (hover || selected) && (
+          <>
+            <Tip label="Edit"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onEdit() }}><I name="edit" size={12} /></Btn></Tip>
+            {!g.article?.wpStatus && <Tip label="Save as draft"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onQuickSave('draft') }}><I name="copy" size={12} /></Btn></Tip>}
+            <Tip label="Publish"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onQuickSave('publish') }}><I name="wordpress" size={12} color="var(--accent)" /></Btn></Tip>
+          </>
+        )}
+        {(isDone || g.status === 'error') && (hover || selected) && (
           <Tip label="Delete"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onDelete() }}><I name="trash" size={12} color="var(--danger)" /></Btn></Tip>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
@@ -601,7 +662,7 @@ function PulledPreview({ item, sources, onGenerate }) {
 }
 
 // ── Generated preview pane ───────────────────────────────
-function GeneratedPreview({ g, onEdit, onQuickSave }) {
+function GeneratedPreview({ g, onEdit, onQuickSave, onCancel, onRetry }) {
   if (g.status === 'generating') {
     return (
       <div style={{ padding: 40, maxWidth: 600 }}>
@@ -621,6 +682,9 @@ function GeneratedPreview({ g, onEdit, onQuickSave }) {
           <div style={{ opacity: 0.4 }}>  Rewriting in 1cw.org voice</div>
           <div style={{ opacity: 0.4 }}>  Generating SEO meta</div>
         </div>
+        <div style={{ marginTop: 20 }}>
+          <Btn variant="secondary" size="sm" leftIcon={<I name="x" size={12} />} onClick={onCancel}>Cancel</Btn>
+        </div>
       </div>
     )
   }
@@ -631,7 +695,7 @@ function GeneratedPreview({ g, onEdit, onQuickSave }) {
         <Badge tone="red">Generation failed</Badge>
         <div style={{ fontSize: 15, fontWeight: 500, margin: '12px 0 6px', color: 'var(--ink)' }}>{g.item?.title}</div>
         <div style={{ fontSize: 13, color: 'var(--danger)', fontFamily: 'var(--mono)', marginBottom: 20 }}>{g.error}</div>
-        <Btn variant="secondary" leftIcon={<I name="refresh" size={13} />}>Retry</Btn>
+        <Btn variant="secondary" leftIcon={<I name="refresh" size={13} />} onClick={onRetry}>Retry</Btn>
       </div>
     )
   }
