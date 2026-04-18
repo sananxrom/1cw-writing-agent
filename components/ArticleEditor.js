@@ -136,7 +136,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
       if (!featuredImageId && article.featuredImageUrl && !article.featuredImageUrl.startsWith('data:')) {
         setSaveMsg('Uploading featured image…')
         try {
-          const uploaded = await uploadImageToWP(article.featuredImageUrl, null, article.title)
+          const uploaded = await uploadImageToWP(article.featuredImageUrl, article.imageTitle || null, article.imageAlt || article.title, article.imageCaption || '')
           featuredImageId = uploaded.id
           set('featuredImageId', uploaded.id)
           set('featuredImageUrl', uploaded.url)
@@ -493,7 +493,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}><Switch checked={!!article.hideAds} onChange={v => set('hideAds', v)} /><div><div style={{ fontSize: 13 }}>Hide Ads</div><div style={{ fontSize: 11, color: 'var(--muted)' }}>Disable ads on this article</div></div></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}><Switch checked={!!article.hideFeatured} onChange={v => set('hideFeatured', v)} /><span style={{ fontSize: 13 }}>Hide Featured Image</span></div>
-              <Toggle label="Inline Related Posts" checked={!!article.inlineRelated} onChange={v => set('inlineRelated', v)} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}><Switch checked={!!article.inlineRelated} onChange={v => set('inlineRelated', v)} /><span style={{ fontSize: 13 }}>Inline Related Posts</span></div>
             </div>
 
             <div style={{ marginTop: 16 }}>
