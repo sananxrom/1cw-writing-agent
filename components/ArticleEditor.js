@@ -1,6 +1,6 @@
 // components/ArticleEditor.js
 import { useState, useEffect, useRef } from 'react'
-import { Btn, Input, Select, Toggle, Badge, Card, CardHeader, Spinner } from './UI'
+import { Btn, Badge, Spinner, EmptyState, Topbar, I, InlineSelect, TextInput, Textarea, FieldLabel, Switch } from './UI'
 import { generateArticle, searchPixabay, uploadImageToWP, resolveCategoryIds, resolveTagIds, saveToWordPress } from '../lib/api'
 import { storage } from '../lib/storage'
 
@@ -188,15 +188,15 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
 
   const panelStyle = (p) => ({
     padding: '6px 12px', fontSize: 12, cursor: 'pointer', borderRadius: 6,
-    background: activePanel === p ? '#0d0d0d' : 'transparent',
-    color: activePanel === p ? '#fff' : '#5c5b57',
-    border: 'none', fontFamily: "'Sora', sans-serif",
+    background: activePanel === p ? 'var(--ink)' : 'transparent',
+    color: activePanel === p ? '#fff' : 'var(--ink-2)',
+    border: 'none', fontFamily: "var(--sans)",
     transition: 'all 0.15s',
   })
 
   const fieldLabel = (label, field, canRegen = true) => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-      <label style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: '#9c9a92', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      <label style={{ fontSize: 11, fontFamily: "var(--mono)", color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
         {label}
       </label>
       {canRegen && (
@@ -210,12 +210,12 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
       {/* Warnings modal */}
       {showWarnings && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fdfcf9', borderRadius: 12, padding: 28, maxWidth: 420, width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
-            <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 20, color: '#0d0d0d', marginBottom: 12 }}>Fields missing</div>
-            <div style={{ fontSize: 13, color: '#5c5b57', marginBottom: 16 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 28, maxWidth: 420, width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontFamily: "var(--sans)", fontSize: 20, color: 'var(--ink)', marginBottom: 12 }}>Fields missing</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 16 }}>
               The following fields are empty:
               <ul style={{ marginTop: 8, paddingLeft: 20 }}>
-                {getWarnings().map(w => <li key={w} style={{ color: '#c0271e', fontFamily: "'DM Mono', monospace", fontSize: 12 }}>{w}</li>)}
+                {getWarnings().map(w => <li key={w} style={{ color: 'var(--danger)', fontFamily: "var(--mono)", fontSize: 12 }}>{w}</li>)}
               </ul>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
@@ -226,17 +226,17 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
         </div>
       )}
       {/* Top toolbar */}
-      <div style={{ background: '#fdfcf9', borderBottom: '1px solid #dedad2', padding: '0 20px', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 20px', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9c9a92', fontSize: 13 }}>← Back</button>
-          <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, color: '#0d0d0d' }}>
+          <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 13 }}>← Back</button>
+          <div style={{ fontFamily: "var(--sans)", fontSize: 18, color: 'var(--ink)' }}>
             {article.title?.slice(0, 60) || 'New Article'}
             {article.title?.length > 60 ? '…' : ''}
           </div>
           {article.wpPostId && <Badge color="green">Saved to WP #{article.wpPostId}</Badge>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('Error') ? '#c0271e' : '#1a7a45', fontFamily: "'DM Mono', monospace" }}>{saveMsg}</span>}
+          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('Error') ? 'var(--danger)' : 'var(--success)', fontFamily: "var(--mono)" }}>{saveMsg}</span>}
           <Btn variant="secondary" size="sm" onClick={() => handleSaveClick('draft')} disabled={saving}>
             {saving ? <Spinner size={12} /> : ''}Save Draft
           </Btn>
@@ -247,7 +247,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
       </div>
 
       {/* Panel tabs */}
-      <div style={{ background: '#edeae3', borderBottom: '1px solid #dedad2', padding: '6px 20px', display: 'flex', gap: 4, flexShrink: 0 }}>
+      <div style={{ background: 'var(--border)', borderBottom: '1px solid var(--border)', padding: '6px 20px', display: 'flex', gap: 4, flexShrink: 0 }}>
         {PANELS.map(p => (
           <button key={p} style={panelStyle(p)} onClick={() => setActivePanel(p)}>
             {p.charAt(0).toUpperCase() + p.slice(1)}
@@ -264,20 +264,20 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
             <div style={{ marginBottom: 16 }}>
               {fieldLabel('Title', 'title')}
               <input value={article.title || ''} onChange={e => set('title', e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', border: '1px solid #dedad2', borderRadius: 7, fontSize: 18, fontFamily: "'Instrument Serif', serif", background: '#fdfcf9', color: '#0d0d0d', outline: 'none' }} />
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 18, fontFamily: "var(--sans)", background: 'var(--surface)', color: 'var(--ink)', outline: 'none' }} />
             </div>
 
             <div style={{ marginBottom: 16 }}>
               {fieldLabel('Tagline', 'tagline')}
               <input value={article.tagline || ''} onChange={e => set('tagline', e.target.value)}
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #dedad2', borderRadius: 7, fontSize: 14, fontFamily: "'Sora', sans-serif", background: '#fdfcf9', color: '#5c5b57', fontStyle: 'italic', outline: 'none' }} />
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 14, fontFamily: "var(--sans)", background: 'var(--surface)', color: 'var(--ink-2)', fontStyle: 'italic', outline: 'none' }} />
             </div>
 
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 {fieldLabel('Body', 'body')}
                 <button onClick={() => setHtmlMode(!htmlMode)}
-                  style={{ fontSize: 11, color: '#9c9a92', background: 'none', border: '1px solid #dedad2', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                  style={{ fontSize: 11, color: 'var(--muted)', background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontFamily: "var(--mono)" }}>
                   {htmlMode ? 'Preview' : 'HTML'}
                 </button>
               </div>
@@ -287,7 +287,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
                   const wc = e.target.value.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length
                   set('wordCount', wc)
                 }}
-                  style={{ width: '100%', minHeight: 400, padding: '12px', border: '1px solid #dedad2', borderRadius: 7, fontSize: 12, fontFamily: "'DM Mono', monospace", background: '#fdfcf9', color: '#0d0d0d', resize: 'vertical', outline: 'none', lineHeight: 1.6 }} />
+                  style={{ width: '100%', minHeight: 400, padding: '12px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 12, fontFamily: "var(--mono)", background: 'var(--surface)', color: 'var(--ink)', resize: 'vertical', outline: 'none', lineHeight: 1.6 }} />
               ) : (
                 <div
                   contentEditable
@@ -298,7 +298,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
                     set('wordCount', wc)
                   }}
                   dangerouslySetInnerHTML={{ __html: article.body || '' }}
-                  style={{ width: '100%', minHeight: 400, padding: '16px', border: '1px solid #dedad2', borderRadius: 7, fontSize: 14, fontFamily: "'Sora', sans-serif", background: '#fdfcf9', color: '#0d0d0d', outline: 'none', lineHeight: 1.7 }}
+                  style={{ width: '100%', minHeight: 400, padding: '16px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 14, fontFamily: "var(--sans)", background: 'var(--surface)', color: 'var(--ink)', outline: 'none', lineHeight: 1.7 }}
                   className="prose-editor"
                 />
               )}
@@ -307,7 +307,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
             <div style={{ marginBottom: 16 }}>
               {fieldLabel('Excerpt', 'excerpt')}
               <textarea value={article.excerpt || ''} onChange={e => set('excerpt', e.target.value)} rows={3}
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid #dedad2', borderRadius: 7, fontSize: 13, fontFamily: "'Sora', sans-serif", background: '#fdfcf9', color: '#0d0d0d', resize: 'vertical', outline: 'none', lineHeight: 1.6 }} />
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, fontFamily: "var(--sans)", background: 'var(--surface)', color: 'var(--ink)', resize: 'vertical', outline: 'none', lineHeight: 1.6 }} />
             </div>
           </div>
         )}
@@ -319,7 +319,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
               {fieldLabel('SEO Title', 'seoTitle')}
               <input value={article.seoTitle || ''} onChange={e => set('seoTitle', e.target.value)}
                 style={inputStyle} />
-              <div style={{ fontSize: 11, color: article.seoTitle?.length > 60 ? '#c0271e' : '#9c9a92', marginTop: 3, fontFamily: "'DM Mono', monospace" }}>
+              <div style={{ fontSize: 11, color: article.seoTitle?.length > 60 ? 'var(--danger)' : 'var(--muted)', marginTop: 3, fontFamily: "var(--mono)" }}>
                 {article.seoTitle?.length || 0}/60 chars
               </div>
             </div>
@@ -328,7 +328,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
               {fieldLabel('Meta Description', 'metaDescription')}
               <textarea value={article.metaDescription || ''} onChange={e => set('metaDescription', e.target.value)} rows={3}
                 style={{ ...inputStyle, resize: 'vertical' }} />
-              <div style={{ fontSize: 11, color: (article.metaDescription?.length || 0) > 155 ? '#c0271e' : '#9c9a92', marginTop: 3, fontFamily: "'DM Mono', monospace" }}>
+              <div style={{ fontSize: 11, color: (article.metaDescription?.length || 0) > 155 ? 'var(--danger)' : 'var(--muted)', marginTop: 3, fontFamily: "var(--mono)" }}>
                 {article.metaDescription?.length || 0}/155 chars
               </div>
             </div>
@@ -342,8 +342,8 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
             <div style={{ marginBottom: 16 }}>
               {fieldLabel('Slug', 'slug', false)}
               <input value={article.slug || ''} onChange={e => set('slug', e.target.value)}
-                style={{ ...inputStyle, fontFamily: "'DM Mono', monospace" }} />
-              <div style={{ fontSize: 11, color: '#9c9a92', marginTop: 3 }}>
+                style={{ ...inputStyle, fontFamily: "var(--mono)" }} />
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
                 1cw.org/{article.slug || '...'}
               </div>
             </div>
@@ -351,14 +351,14 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>Canonical URL (optional)</label>
               <input value={article.canonicalUrl || ''} onChange={e => set('canonicalUrl', e.target.value)}
-                placeholder="https://..." style={{ ...inputStyle, fontFamily: "'DM Mono', monospace" }} />
+                placeholder="https://..." style={{ ...inputStyle, fontFamily: "var(--mono)" }} />
             </div>
 
             {/* SEO Preview */}
-            <div style={{ background: '#fdfcf9', border: '1px solid #dedad2', borderRadius: 8, padding: 16, marginTop: 8 }}>
-              <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: '#9c9a92', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Google preview</div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginTop: 8 }}>
+              <div style={{ fontSize: 11, fontFamily: "var(--mono)", color: 'var(--muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Google preview</div>
               <div style={{ color: '#1a0dab', fontSize: 18, marginBottom: 2, cursor: 'pointer' }}>{article.seoTitle || article.title || 'Title'}</div>
-              <div style={{ color: '#006621', fontSize: 13, marginBottom: 4, fontFamily: "'DM Mono', monospace" }}>1cw.org › {article.slug || '...'}</div>
+              <div style={{ color: '#006621', fontSize: 13, marginBottom: 4, fontFamily: "var(--mono)" }}>1cw.org › {article.slug || '...'}</div>
               <div style={{ color: '#545454', fontSize: 14, lineHeight: 1.5 }}>{article.metaDescription || 'Meta description...'}</div>
             </div>
           </div>
@@ -370,7 +370,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
             <div style={{ marginBottom: 20 }}>
               <label style={labelStyle}>Primary Category *</label>
               <select value={article.primaryCategory || ''} onChange={e => set('primaryCategory', e.target.value)}
-                style={{ width: '100%', padding: '8px 10px', border: '1px solid #dedad2', borderRadius: 6, fontSize: 13, fontFamily: "'Sora', sans-serif", background: '#fdfcf9', color: '#0d0d0d' }}>
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, fontFamily: "var(--sans)", background: 'var(--surface)', color: 'var(--ink)' }}>
                 <option value="">Select primary category...</option>
                 {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -389,9 +389,9 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
                     }}
                       style={{
                         padding: '4px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
-                        border: `1px solid ${selected ? '#0d0d0d' : '#dedad2'}`,
-                        background: selected ? '#0d0d0d' : '#fdfcf9',
-                        color: selected ? '#fff' : '#5c5b57',
+                        border: `1px solid ${selected ? 'var(--ink)' : 'var(--border)'}`,
+                        background: selected ? 'var(--ink)' : 'var(--surface)',
+                        color: selected ? '#fff' : 'var(--ink-2)',
                       }}>
                       {c}
                     </div>
@@ -412,9 +412,9 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
                     }}
                       style={{
                         padding: '4px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
-                        border: `1px solid ${selected ? '#185fa5' : '#dedad2'}`,
-                        background: selected ? '#e6f1fb' : '#fdfcf9',
-                        color: selected ? '#185fa5' : '#5c5b57',
+                        border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+                        background: selected ? 'var(--accent-soft)' : 'var(--surface)',
+                        color: selected ? 'var(--accent)' : 'var(--ink-2)',
                       }}>
                       {r}
                     </div>
@@ -427,10 +427,10 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
               {fieldLabel('Keyword Tags', 'keywordTags')}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {(article.keywordTags || []).map((tag, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: '#fef1eb', border: '1px solid #f5c4a8', color: '#c8440a', fontSize: 12 }}>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, background: 'var(--accent-soft)', border: '1px solid var(--accent-border)', color: 'var(--accent)', fontSize: 12 }}>
                     {tag}
                     <button onClick={() => set('keywordTags', article.keywordTags.filter((_, j) => j !== i))}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c8440a', fontSize: 12, padding: 0, lineHeight: 1 }}>×</button>
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 12, padding: 0, lineHeight: 1 }}>×</button>
                   </div>
                 ))}
               </div>
@@ -472,7 +472,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
               <div style={{ marginBottom: 16 }}>
                 <label style={labelStyle}>Video URL (YouTube / Vimeo)</label>
                 <input value={article.videoUrl || ''} onChange={e => set('videoUrl', e.target.value)}
-                  placeholder="https://youtube.com/watch?v=..." style={{ ...inputStyle, fontFamily: "'DM Mono', monospace" }} />
+                  placeholder="https://youtube.com/watch?v=..." style={{ ...inputStyle, fontFamily: "var(--mono)" }} />
               </div>
             )}
 
@@ -480,19 +480,19 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
               <div style={{ marginBottom: 16 }}>
                 <label style={labelStyle}>Audio URL</label>
                 <input value={article.audioUrl || ''} onChange={e => set('audioUrl', e.target.value)}
-                  placeholder="https://..." style={{ ...inputStyle, fontFamily: "'DM Mono', monospace" }} />
+                  placeholder="https://..." style={{ ...inputStyle, fontFamily: "var(--mono)" }} />
               </div>
             )}
 
-            <div style={{ background: '#fdfcf9', border: '1px solid #dedad2', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <Toggle label="Table of Contents" checked={!!article.enableToc} onChange={v => set('enableToc', v)} helpText="Auto-generate TOC from headings" />
-              <Toggle label="Sponsored Post" checked={!!article.sponsored} onChange={v => set('sponsored', v)} />
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}><Switch checked={!!article.enableToc} onChange={v => set('enableToc', v)} /><div><div style={{ fontSize: 13 }}>Table of Contents</div><div style={{ fontSize: 11, color: 'var(--muted)' }}>Auto-generate TOC from headings</div></div></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}><Switch checked={!!article.sponsored} onChange={v => set('sponsored', v)} /><span style={{ fontSize: 13 }}>Sponsored Post</span></div>
               {article.sponsored && (
                 <input value={article.sponsoredLabel || 'Sponsored'} onChange={e => set('sponsoredLabel', e.target.value)}
                   placeholder="Sponsored label text" style={{ ...inputStyle, marginBottom: 8 }} />
               )}
-              <Toggle label="Hide Ads" checked={!!article.hideAds} onChange={v => set('hideAds', v)} helpText="Disable ads on this article" />
-              <Toggle label="Hide Featured Image" checked={!!article.hideFeatured} onChange={v => set('hideFeatured', v)} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}><Switch checked={!!article.hideAds} onChange={v => set('hideAds', v)} /><div><div style={{ fontSize: 13 }}>Hide Ads</div><div style={{ fontSize: 11, color: 'var(--muted)' }}>Disable ads on this article</div></div></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}><Switch checked={!!article.hideFeatured} onChange={v => set('hideFeatured', v)} /><span style={{ fontSize: 13 }}>Hide Featured Image</span></div>
               <Toggle label="Inline Related Posts" checked={!!article.inlineRelated} onChange={v => set('inlineRelated', v)} />
             </div>
 
@@ -512,7 +512,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
               <div style={{ marginBottom: 20 }}>
                 <label style={labelStyle}>Current Featured Image</label>
                 <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <img src={article.featuredImageUrl} alt="Featured" style={{ maxWidth: 400, height: 220, objectFit: 'cover', borderRadius: 8, border: '1px solid #dedad2' }} />
+                  <img src={article.featuredImageUrl} alt="Featured" style={{ maxWidth: 400, height: 220, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }} />
                   {article.featuredImageId && <div style={{ position: 'absolute', top: 8, right: 8 }}><Badge color="green">Uploaded to WP</Badge></div>}
                   <button onClick={() => { set('featuredImageUrl', ''); set('featuredImageId', null) }}
                     style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
@@ -540,7 +540,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
                   {pixabayImages.map(img => (
                     <div key={img.id} onClick={() => selectImage(img)}
                       style={{ cursor: 'pointer', borderRadius: 6, overflow: 'hidden', border: '2px solid transparent', transition: 'border 0.15s', position: 'relative' }}
-                      onMouseEnter={e => e.currentTarget.style.borderColor = '#c8440a'}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
                       onMouseLeave={e => e.currentTarget.style.borderColor = 'transparent'}>
                       <img src={img.previewURL} alt={img.tags} style={{ width: '100%', height: 110, objectFit: 'cover' }} />
                       {uploadLoading && <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner /></div>}
@@ -586,8 +586,8 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
             </div>
 
             {/* Meta summary */}
-            <div style={{ background: '#fdfcf9', border: '1px solid #dedad2', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: '#9c9a92', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Article summary</div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontFamily: "var(--mono)", color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Article summary</div>
               {[
                 ['Word count', article.wordCount || 0],
                 ['Primary category', article.primaryCategory || '—'],
@@ -596,8 +596,8 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
                 ['Region tags', (article.regionTags || []).join(', ') || 'None'],
                 ['Source', article.sourceName || '—'],
               ].map(([k, v]) => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f5f3ee', fontSize: 13 }}>
-                  <span style={{ color: '#9c9a92' }}>{k}</span>
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--surface-2)', fontSize: 13 }}>
+                  <span style={{ color: 'var(--muted)' }}>{k}</span>
                   <span style={{ color: '#2e2e2b', fontWeight: 500 }}>{v}</span>
                 </div>
               ))}
@@ -605,24 +605,24 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
 
             {/* Source attribution */}
             {article.sourceUrl && (
-              <div style={{ background: '#fef1eb', border: '1px solid #f5c4a8', borderRadius: 8, padding: 12, marginBottom: 20, fontSize: 12 }}>
-                <div style={{ color: '#c8440a', fontFamily: "'DM Mono', monospace", fontSize: 10, marginBottom: 4 }}>SOURCE ATTRIBUTION</div>
+              <div style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent-border)', borderRadius: 8, padding: 12, marginBottom: 20, fontSize: 12 }}>
+                <div style={{ color: 'var(--accent)', fontFamily: "var(--mono)", fontSize: 10, marginBottom: 4 }}>SOURCE ATTRIBUTION</div>
                 <div style={{ color: '#2e2e2b' }}>{article.sourceName}</div>
-                <div style={{ color: '#9c9a92', fontSize: 11, wordBreak: 'break-all', fontFamily: "'DM Mono', monospace" }}>{article.sourceUrl}</div>
+                <div style={{ color: 'var(--muted)', fontSize: 11, wordBreak: 'break-all', fontFamily: "var(--mono)" }}>{article.sourceUrl}</div>
               </div>
             )}
 
             {saveMsg && (
               <div style={{
                 padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 13,
-                background: saveMsg.startsWith('Error') ? '#fdecea' : '#e4f4ec',
-                color: saveMsg.startsWith('Error') ? '#c0271e' : '#1a7a45',
-                border: `1px solid ${saveMsg.startsWith('Error') ? '#f5c0bc' : '#a8dfc0'}`,
+                background: saveMsg.startsWith('Error') ? 'var(--danger-soft)' : 'var(--success-soft)',
+                color: saveMsg.startsWith('Error') ? 'var(--danger)' : 'var(--success)',
+                border: `1px solid ${saveMsg.startsWith('Error') ? '#fecaca' : '#bbf7d0'}`,
               }}>
                 {saveMsg}
                 {article.wpPostUrl && !saveMsg.startsWith('Error') && (
                   <a href={article.wpPostUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ marginLeft: 8, color: '#1a7a45', textDecoration: 'underline' }}>
+                    style={{ marginLeft: 8, color: 'var(--success)', textDecoration: 'underline' }}>
                     View in WP →
                   </a>
                 )}
@@ -651,19 +651,19 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
 // Inline styles
 const inputStyle = {
   width: '100%', padding: '8px 10px',
-  border: '1px solid #dedad2', borderRadius: 6,
-  fontSize: 13, fontFamily: "'Sora', sans-serif",
-  background: '#fdfcf9', color: '#0d0d0d', outline: 'none',
+  border: '1px solid var(--border)', borderRadius: 6,
+  fontSize: 13, fontFamily: "var(--sans)",
+  background: 'var(--surface)', color: 'var(--ink)', outline: 'none',
 }
 const selectStyle = {
   width: '100%', padding: '8px 10px',
-  border: '1px solid #dedad2', borderRadius: 6,
-  fontSize: 13, fontFamily: "'Sora', sans-serif",
-  background: '#fdfcf9', color: '#0d0d0d',
+  border: '1px solid var(--border)', borderRadius: 6,
+  fontSize: 13, fontFamily: "var(--sans)",
+  background: 'var(--surface)', color: 'var(--ink)',
 }
 const labelStyle = {
-  display: 'block', fontSize: 11, fontFamily: "'DM Mono', monospace",
-  color: '#9c9a92', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5,
+  display: 'block', fontSize: 11, fontFamily: "var(--mono)",
+  color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5,
 }
 
 // Inline RegenBtn to avoid circular import
@@ -673,7 +673,7 @@ function RegenBtn({ field, onRegen, loading }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       {!show ? (
-        <button onClick={() => setShow(true)} style={{ background: 'none', border: '1px solid #dedad2', borderRadius: 4, padding: '1px 7px', fontSize: 10, color: '#9c9a92', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+        <button onClick={() => setShow(true)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 7px', fontSize: 10, color: 'var(--muted)', cursor: 'pointer', fontFamily: "var(--mono)" }}>
           {loading ? '...' : '↺ regen'}
         </button>
       ) : (
@@ -681,11 +681,11 @@ function RegenBtn({ field, onRegen, loading }) {
           <input autoFocus value={inst} onChange={e => setInst(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { onRegen(field, inst); setShow(false); setInst('') } if (e.key === 'Escape') { setShow(false); setInst('') } }}
             placeholder="Instruction... (Enter)"
-            style={{ fontSize: 11, padding: '2px 7px', border: '1px solid #c8440a', borderRadius: 4, outline: 'none', width: 180, fontFamily: "'Sora', sans-serif" }} />
+            style={{ fontSize: 11, padding: '2px 7px', border: '1px solid var(--accent)', borderRadius: 4, outline: 'none', width: 180, fontFamily: "var(--sans)" }} />
           <button onClick={() => { onRegen(field, inst); setShow(false); setInst('') }}
-            style={{ background: '#c8440a', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>Run</button>
+            style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>Run</button>
           <button onClick={() => { setShow(false); setInst('') }}
-            style={{ background: 'none', border: '1px solid #dedad2', borderRadius: 4, padding: '2px 6px', fontSize: 11, cursor: 'pointer', color: '#9c9a92' }}>✕</button>
+            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px', fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>✕</button>
         </span>
       )}
     </span>
