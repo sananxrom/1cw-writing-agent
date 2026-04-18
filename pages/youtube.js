@@ -1,202 +1,85 @@
-// pages/youtube.js - YouTube podcast to article
-import { useState, useEffect } from 'react'
+// pages/youtube.js — matching design YouTubePage
+import { useState } from 'react'
 import Layout from '../components/Layout'
 import ArticleEditor from '../components/ArticleEditor'
-import { Btn, Badge, Spinner, Topbar } from '../components/UI'
+import { Topbar, Btn, I, Switch, TextInput, Spinner, Badge } from '../components/UI'
 import { getYouTubeChannel, getTranscript, generateArticle } from '../lib/api'
 import { storage } from '../lib/storage'
 
-const ALL_CATEGORIES = [
-  'Artificial Intelligence', 'XR, VR, AR – XROM', 'Blockchain',
-  'Quantum & Nanotechnology', 'Robotics & Automation', 'Automotive',
-  'Life Sciences & Biotechnology', 'Earth & Environment', 'Health & Medicine',
-  'Space & Astronomy', 'Startups & Entrepreneurship', 'Policy & Economy',
-  'Corporate Tech & Semiconductors', 'Telecom & Energy Tech',
-]
-
 export default function YouTube() {
-  const [channel, setChannel] = useState(null)
-  const [videos, setVideos] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [status, setStatus] = useState('')
-  const [article, setArticle] = useState(null)
-  const [selectedCategory, setSelectedCategory] = useState('Artificial Intelligence')
+  const [singleUrl, setSingleUrl] = useState('')
+  const [processing, setProcessing] = useState(false)
+  const [editingArticle, setEditingArticle] = useState(null)
+  const sources = storage.getSources().filter(s => s.type === 'youtube')
 
-  useEffect(() => {
-    loadChannel()
-  }, [])
-
-  async function loadChannel() {
-    setLoading(true)
-    setStatus('Loading channel...')
+  async function handleSingle() {
+    if (!singleUrl.trim()) return
+    setProcessing(true)
     try {
-      const sources = storage.getSources()
-      const ytSource = sources.find(s => s.type === 'youtube')
-      if (!ytSource) {
-        setStatus('No YouTube source configured. Add one in Settings → Sources.')
-        setLoading(false)
-        return
-      }
-      const handle = ytSource.url.replace('https://www.youtube.com/', '').replace('https://youtube.com/', '')
-      const data = await getYouTubeChannel(handle)
-      setChannel(data)
-      setVideos(data.videos || [])
-      setStatus('')
-    } catch (err) {
-      setStatus('Error: ' + err.message)
-    }
-    setLoading(false)
-  }
-
-  async function convertVideo(video) {
-    setGenerating(true)
-    setStatus('Fetching transcript...')
-    try {
+      const videoId = singleUrl.match(/(?:v=|youtu\.be\/)([^&\s]+)/)?.[1]
+      if (!videoId) throw new Error('Invalid YouTube URL')
+      const transcript = await getTranscript(videoId)
       const settings = storage.getSettings()
-      const sources = storage.getSources()
-      const ytSource = sources.find(s => s.type === 'youtube')
-
-      const transcriptData = await getTranscript(video.videoId)
-      setStatus('Generating article from transcript...')
-
-      const authors = storage.getAuthors()
-      const authorObj = authors.find(a => a.id === ytSource?.defaultAuthor)
-
-      const result = await generateArticle({
-        content: transcriptData.contentForClaude || transcriptData.transcript || video.description,
-        title: video.title,
-        sourceUrl: `https://youtube.com/watch?v=${video.videoId}`,
-        sourceName: channel?.channelTitle || '1CW Podcast',
-        primaryCategory: selectedCategory,
-        writingPrompt: ytSource?.writingPrompt || settings.globalWritingPrompt,
-        authorStyle: authorObj?.style || '',
-        postFormat: 'video',
+      const article = await generateArticle({
+        content: transcript.text || '',
+        title: transcript.title || 'YouTube Video',
+        sourceUrl: singleUrl,
         mode: 'youtube',
+        writingPrompt: settings.globalWritingPrompt,
       })
-
-      setArticle({
-        ...result,
-        postFormat: 'video',
-        videoUrl: `https://youtube.com/watch?v=${video.videoId}`,
-        featuredImageUrl: video.thumbnail || '',
-        sourceUrl: `https://youtube.com/watch?v=${video.videoId}`,
-        sourceName: channel?.channelTitle || '1CW Podcast',
-      })
-
-      storage.addSeenUrl(`https://youtube.com/watch?v=${video.videoId}`)
-    } catch (err) {
-      setStatus('Error: ' + err.message)
-    }
-    setGenerating(false)
+      setEditingArticle({ ...article, sourceUrl: singleUrl, videoUrl: singleUrl })
+    } catch (err) { alert('Failed: ' + err.message) }
+    setProcessing(false)
   }
 
-  if (article) {
-    return (
-      <Layout>
-        <ArticleEditor
-          article={article}
-          onBack={() => setArticle(null)}
-          onSaved={() => setArticle(null)}
-        />
-      </Layout>
-    )
-  }
+  if (editingArticle) return (
+    <Layout>
+      <ArticleEditor article={editingArticle} onBack={() => setEditingArticle(null)} onSaved={() => setEditingArticle(null)} />
+    </Layout>
+  )
 
   return (
     <Layout>
-      <Topbar
-        title="YouTube"
-        subtitle="Podcast → Article"
-        actions={
-          <Btn variant="secondary" size="sm" onClick={loadChannel} disabled={loading}>
-            {loading ? <Spinner size={12} /> : '↺'} Refresh
-          </Btn>
-        }
-      />
-
-      <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
-        {status && (
-          <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 7, background: '#fef1eb', border: '1px solid #f5c4a8', fontSize: 13, color: '#c8440a', fontFamily: "'DM Mono', monospace" }}>
-            {status}
-          </div>
-        )}
-
-        {/* Category selector */}
-        <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <label style={{ fontSize: 12, color: '#9c9a92', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Primary category for converted articles</label>
-          <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}
-            style={{ padding: '7px 10px', border: '1px solid #dedad2', borderRadius: 6, fontSize: 13, fontFamily: "'Sora', sans-serif", background: '#fdfcf9', color: '#0d0d0d' }}>
-            {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-
-        {/* Channel header */}
-        {channel && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, padding: '14px 16px', background: '#fdfcf9', border: '1px solid #dedad2', borderRadius: 10 }}>
-            {channel.channelThumbnail && (
-              <img src={channel.channelThumbnail} alt="" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
-            )}
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 500, color: '#0d0d0d' }}>{channel.channelTitle}</div>
-              <div style={{ fontSize: 12, color: '#9c9a92', fontFamily: "'DM Mono', monospace" }}>{videos.length} recent videos loaded</div>
+      <Topbar title="YouTube" subtitle="Transcribe and rewrite video content"
+        actions={<Btn variant="accent" size="sm" leftIcon={<I name="plus" size={13} />}>Add channel</Btn>} />
+      <div style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+        <div style={{ maxWidth: 860 }}>
+          {/* Single video */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginBottom: 24 }}>
+            <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Pull single video</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <TextInput value={singleUrl} onChange={setSingleUrl} placeholder="Paste YouTube URL" icon="youtube" style={{ flex: 1 }} />
+              <Btn variant="primary" onClick={handleSingle} disabled={processing}>
+                {processing ? <><Spinner size={13} /> Processing…</> : 'Transcribe → Rewrite'}
+              </Btn>
             </div>
           </div>
-        )}
 
-        {/* Video list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {videos.map((video, i) => (
-            <div key={video.videoId}
-              style={{ background: '#fdfcf9', border: '1px solid #dedad2', borderRadius: 10, overflow: 'hidden', display: 'flex', gap: 0 }}>
-              {/* Thumbnail */}
-              <div style={{ width: 200, flexShrink: 0, position: 'relative', background: '#1a1a1a' }}>
-                {video.thumbnail ? (
-                  <img src={video.thumbnail} alt="" style={{ width: '100%', height: 120, objectFit: 'cover' }} />
-                ) : (
-                  <div style={{ width: '100%', height: 120, background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: 28, color: 'rgba(255,255,255,0.3)' }}>▶</span>
-                  </div>
-                )}
-                {i === 0 && (
-                  <div style={{ position: 'absolute', top: 8, left: 8, background: '#c8440a', color: '#fff', fontSize: 9, fontFamily: "'DM Mono', monospace", padding: '2px 7px', borderRadius: 3, fontWeight: 500, textTransform: 'uppercase' }}>
-                    Latest
-                  </div>
-                )}
-                {storage.isUrlSeen(`https://youtube.com/watch?v=${video.videoId}`) && (
-                  <div style={{ position: 'absolute', top: 8, right: 8 }}>
-                    <Badge color="gray">Done</Badge>
-                  </div>
-                )}
-              </div>
-
-              {/* Info */}
-              <div style={{ flex: 1, padding: '14px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: '#0d0d0d', marginBottom: 6, lineHeight: 1.4 }}>{video.title}</div>
-                  <div style={{ fontSize: 12, color: '#9c9a92', fontFamily: "'DM Mono', monospace" }}>
-                    {video.publishedAt ? new Date(video.publishedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#9c9a92', marginTop: 6, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                    {video.description?.slice(0, 150)}
-                  </div>
-                </div>
-                <div style={{ marginTop: 12 }}>
-                  <Btn variant={i === 0 ? 'primary' : 'secondary'} size="sm"
-                    onClick={() => convertVideo(video)}
-                    disabled={generating}>
-                    {generating ? <><Spinner size={12} />{status}</> : 'Convert to Article →'}
-                  </Btn>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {videos.length === 0 && !loading && !status && (
-            <div style={{ textAlign: 'center', padding: '48px 24px', color: '#9c9a92', fontSize: 14 }}>
-              No videos loaded. Make sure your YouTube source is configured in Settings.
+          {/* Tracked channels */}
+          <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Tracked channels</div>
+          {sources.length === 0 && (
+            <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13, border: '1px dashed var(--border)', borderRadius: 8 }}>
+              No YouTube channels configured. Add one in <a href="/settings" style={{ color: 'var(--accent)' }}>Settings → Sources</a>.
             </div>
           )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            {sources.map(s => (
+              <div key={s.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid var(--border)' }}>
+                  <I name="youtube" size={18} color="var(--danger)" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{s.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>{s.primaryCategory}</div>
+                  <div style={{ marginTop: 10, display: 'flex', gap: 4 }}>
+                    <Btn variant="secondary" size="sm" leftIcon={<I name="refresh" size={11} />}>Pull latest</Btn>
+                    <Btn variant="ghost" size="sm"><I name="settings" size={11} /></Btn>
+                  </div>
+                </div>
+                <Switch checked={s.active} onChange={() => {}} />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </Layout>
