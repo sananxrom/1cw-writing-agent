@@ -1,489 +1,477 @@
-// pages/settings.js
+// pages/settings.js — matching design SettingsPage
 import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
-import { Btn, Badge, Toggle, Spinner, Topbar } from '../components/UI'
-import { storage, DEFAULT_SOURCES, DEFAULT_AI_PROVIDERS, PROVIDER_MODELS } from '../lib/storage'
+import { Topbar, Btn, I, Switch, TextInput, Textarea, InlineSelect, Segmented, Badge, Spinner, FieldLabel } from '../components/UI'
 import { wpRequest } from '../lib/api'
+import { storage, PROVIDER_MODELS, DEFAULT_SETTINGS } from '../lib/storage'
 
-const ALL_CATEGORIES = [
-  'Artificial Intelligence', 'XR, VR, AR – XROM', 'Blockchain',
-  'Quantum & Nanotechnology', 'Robotics & Automation', 'Automotive',
-  'Life Sciences & Biotechnology', 'Earth & Environment', 'Health & Medicine',
-  'Space & Astronomy', 'Startups & Entrepreneurship', 'Policy & Economy',
-  'Corporate Tech & Semiconductors', 'Telecom & Energy Tech',
+const TABS = [
+  { id: 'sources',   label: 'Sources' },
+  { id: 'wordpress', label: 'WordPress' },
+  { id: 'models',    label: 'Models' },
+  { id: 'prompts',   label: 'Prompts' },
+  { id: 'authors',   label: 'Authors' },
+  { id: 'schedule',  label: 'Schedule' },
 ]
 
+const CATEGORIES = [
+  '','Artificial Intelligence','XR, VR, AR – XROM','Blockchain','Quantum & Nanotechnology',
+  'Robotics & Automation','Automotive','Life Sciences & Biotechnology','Earth & Environment',
+  'Health & Medicine','Space & Astronomy','Startups & Entrepreneurship','Policy & Economy',
+  'Corporate Tech & Semiconductors','Telecom & Energy Tech',
+]
+
+const POST_FORMATS = ['standard','video','audio','gallery','image','link','quote','status']
+
+const DEFAULT_PROMPTS = {
+  global: `You write for 1cw.org — a crisp, analytical news site covering AI, semiconductors, space, and emerging tech.\n\nVoice: direct, informed, never breathless. Lead with the news, then the why-it-matters. Avoid marketing copy, hype words ("revolutionary", "game-changing"), and content-mill tropes.\n\nStructure:\n- Open with a 1-2 sentence lede that states the news.\n- Give 2-3 paragraphs of context.\n- Close with forward-looking significance.\n\nAlways cite the original source at least once. Prefer specificity over generality: numbers, names, dates.`,
+  article: `Given the source content, draft a 900-1200 word article.\n\nAlways:\n- Open with a tight lede that states what's new.\n- Embed the source link in-line near the top.\n- Use subheadings only when the piece runs past ~600 words.\n- End with a "what it means" paragraph tying this to the broader trend.`,
+  title: `Rewrite the source headline as a 1cw.org title.\n\nRules:\n- 50-70 characters.\n- No clickbait, no emoji.\n- Front-load the subject.\n- Prefer verbs over gerunds.`,
+  summary: `Write a 140-160 character summary of the article. No trailing period unless needed. Should work as both the WP excerpt and the meta description.`,
+  image: `Write a single-sentence image prompt for the featured image.\n\nStyle: editorial, photoreal, neutral background, no text overlays, 16:9 aspect.`,
+}
+
 export default function Settings() {
-  const [activeSection, setActiveSection] = useState('wordpress')
-  const [settings, setSettings] = useState({})
-  const [sources, setSources] = useState([])
-  const [authors, setAuthors] = useState([])
-  const [aiProviders, setAIProviders] = useState(DEFAULT_AI_PROVIDERS)
-  const [testingProvider, setTestingProvider] = useState({})
-  const [testProviderResult, setTestProviderResult] = useState({})
-  const [testing, setTesting] = useState({})
-  const [testResult, setTestResult] = useState({})
-  const [saved, setSaved] = useState(false)
-  const [editingSource, setEditingSource] = useState(null)
-  const [editingAuthor, setEditingAuthor] = useState(null)
-  const [wpCache, setWpCache] = useState({ categories: [], users: [] })
-
-  useEffect(() => {
-    setSettings(storage.getSettings())
-    setSources(storage.getSources())
-    setAuthors(storage.getAuthors())
-    setWpCache(storage.getWPCache())
-    setAIProviders(storage.getAIProviders())
-  }, [])
-
-  function saveAll() {
-    storage.setSettings(settings)
-    storage.setSources(sources)
-    storage.setAuthors(authors)
-    storage.setAIProviders(aiProviders)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  async function testProvider(task) {
-    const cfg = aiProviders[task]
-    if (!cfg?.apiKey) {
-      setTestProviderResult(p => ({ ...p, [task]: '✗ No API key entered' }))
-      return
-    }
-    setTestingProvider(p => ({ ...p, [task]: true }))
-    setTestProviderResult(p => ({ ...p, [task]: '' }))
-    try {
-      const r = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: 'Test', title: 'Test', mode: 'create',
-          primaryCategory: 'Artificial Intelligence', writingPrompt: 'One sentence.',
-          provider: cfg.provider, model: cfg.model, apiKey: cfg.apiKey,
-        }),
-      })
-      const d = await r.json()
-      if (d.title) setTestProviderResult(p => ({ ...p, [task]: '✓ Working!' }))
-      else throw new Error(d.error || 'No response')
-    } catch (err) {
-      setTestProviderResult(p => ({ ...p, [task]: `✗ ${err.message.slice(0, 80)}` }))
-    }
-    setTestingProvider(p => ({ ...p, [task]: false }))
-  }
-
-  async function testWP() {
-    setTesting(p => ({ ...p, wp: true }))
-    setTestResult(p => ({ ...p, wp: '' }))
-    try {
-      const cats = await wpRequest('categories?per_page=100')
-      const users = await wpRequest('users?per_page=100')
-      const tags = await wpRequest('tags?per_page=100')
-      const cache = { categories: cats, users, tags, fetchedAt: Date.now() }
-      storage.setWPCache(cache)
-      setWpCache(cache)
-      setTestResult(p => ({ ...p, wp: `✓ Connected! Found ${cats.length} categories, ${users.length} users, ${tags.length} tags.` }))
-    } catch (err) {
-      setTestResult(p => ({ ...p, wp: `✗ ${err.message}` }))
-    }
-    setTesting(p => ({ ...p, wp: false }))
-  }
-
-  async function testAnthropicKey() {
-    setTesting(p => ({ ...p, anthropic: true }))
-    setTestResult(p => ({ ...p, anthropic: '' }))
-    try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'Test', title: 'Test', mode: 'create', primaryCategory: 'Artificial Intelligence', writingPrompt: 'One sentence.' }),
-      })
-      const data = await res.json()
-      if (data.title) setTestResult(p => ({ ...p, anthropic: '✓ Claude API working!' }))
-      else throw new Error(data.error || 'No response')
-    } catch (err) {
-      setTestResult(p => ({ ...p, anthropic: `✗ ${err.message}` }))
-    }
-    setTesting(p => ({ ...p, anthropic: false }))
-  }
-
-  const SECTIONS = ['wordpress', 'aiproviders', 'writing', 'authors', 'sources']
-  const SECTION_LABELS = { wordpress: 'WordPress', aiproviders: 'AI Providers', writing: 'Writing Style', authors: 'Authors', sources: 'Sources' }
+  const [tab, setTab] = useState('sources')
 
   return (
     <Layout>
-      <Topbar
-        title="Settings"
-        actions={
-          <Btn variant={saved ? 'success' : 'primary'} onClick={saveAll}>
-            {saved ? '✓ Saved!' : 'Save All Changes'}
-          </Btn>
-        }
-      />
-
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Section nav */}
-        <div style={{ width: 180, flexShrink: 0, borderRight: '1px solid #dedad2', background: '#fdfcf9', padding: 12 }}>
-          {SECTIONS.map(s => (
-            <div key={s} onClick={() => setActiveSection(s)}
-              style={{
-                padding: '8px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer', marginBottom: 2,
-                background: activeSection === s ? '#0d0d0d' : 'transparent',
-                color: activeSection === s ? '#fff' : '#5c5b57',
-              }}>
-              {SECTION_LABELS[s]}
-            </div>
-          ))}
-        </div>
-
-        {/* Section content */}
-        <div style={{ flex: 1, overflow: 'auto', padding: 28 }}>
-          <div style={{ maxWidth: 680 }}>
-
-            {/* WORDPRESS */}
-            {activeSection === 'wordpress' && (
-              <div>
-                <SectionTitle>WordPress Connection</SectionTitle>
-                <div style={{ background: '#fdef1eb', border: '1px solid #dedad2', borderRadius: 8, padding: 16, marginBottom: 20, background: '#fff8f5', borderColor: '#f5c4a8' }}>
-                  <div style={{ fontSize: 12, color: '#c8440a', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>ℹ Connection is configured via Vercel environment variables</div>
-                  <div style={{ fontSize: 13, color: '#5c5b57', lineHeight: 1.6 }}>
-                    WP_URL, WP_USER, and WP_PASSWORD are set in your Vercel project settings. Use the test button below to verify the connection is working.
-                  </div>
-                </div>
-
-                <FieldLabel>SEO Plugin</FieldLabel>
-                <select value={settings.seoPlugin || 'rankmath'} onChange={e => setSettings(p => ({ ...p, seoPlugin: e.target.value }))}
-                  style={selectStyle}>
-                  <option value="rankmath">Rank Math</option>
-                  <option value="yoast">Yoast SEO</option>
-                  <option value="none">None</option>
-                </select>
-
-                <div style={{ marginTop: 20 }}>
-                  <Btn variant="secondary" onClick={testWP} disabled={testing.wp}>
-                    {testing.wp ? <Spinner size={12} /> : ''}Test WordPress Connection
-                  </Btn>
-                  {testResult.wp && (
-                    <div style={{ marginTop: 8, fontSize: 13, fontFamily: "'DM Mono', monospace", color: testResult.wp.startsWith('✓') ? '#1a7a45' : '#c0271e' }}>
-                      {testResult.wp}
-                    </div>
-                  )}
-                </div>
-
-                {wpCache.categories?.length > 0 && (
-                  <div style={{ marginTop: 20, padding: 14, background: '#fdfcf9', border: '1px solid #dedad2', borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: '#9c9a92', marginBottom: 8 }}>
-                      Cached from WordPress (last sync: {wpCache.fetchedAt ? new Date(wpCache.fetchedAt).toLocaleString() : 'never'})
-                    </div>
-                    <div style={{ fontSize: 12, color: '#5c5b57' }}>
-                      {wpCache.categories.length} categories · {wpCache.users?.length || 0} users · {wpCache.tags?.length || 0} tags
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* AI PROVIDERS */}
-            {activeSection === 'aiproviders' && (
-              <div>
-                <SectionTitle>AI Providers</SectionTitle>
-                <div style={{ background: '#fff8f5', border: '1px solid #f5c4a8', borderRadius: 8, padding: 14, marginBottom: 24, fontSize: 13, color: '#5c5b57' }}>
-                  API keys are stored locally in your browser — never sent to any server except the AI provider directly. Configure a provider and model for each task below.
-                </div>
-
-                {[
-                  { task: 'writing', label: 'Writing', desc: 'Generates full articles from sources or topics' },
-                  { task: 'editing', label: 'Editing / Regen', desc: 'Regenerates individual fields in the article editor' },
-                  { task: 'scraping', label: 'Web Research', desc: 'Used when scraping URLs (Perplexity recommended for live web data)' },
-                ].map(({ task, label, desc }) => {
-                  const cfg = aiProviders[task] || {}
-                  const models = PROVIDER_MODELS[cfg.provider] || []
-                  return (
-                    <div key={task} style={{ background: '#fdFCf9', border: '1px solid #dedad2', borderRadius: 10, padding: 18, marginBottom: 16 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: '#0d0d0d', marginBottom: 2 }}>{label}</div>
-                          <div style={{ fontSize: 11, color: '#9c9a92', fontFamily: "'DM Mono', monospace" }}>{desc}</div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          {testProviderResult[task] && (
-                            <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: testProviderResult[task].startsWith('✓') ? '#1a7a45' : '#c0271e' }}>
-                              {testProviderResult[task]}
-                            </span>
-                          )}
-                          <Btn variant="secondary" size="sm" onClick={() => testProvider(task)} disabled={testingProvider[task]}>
-                            {testingProvider[task] ? <Spinner size={10} /> : ''}Test
-                          </Btn>
-                        </div>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                        <div>
-                          <FieldLabel>Provider</FieldLabel>
-                          <select
-                            value={cfg.provider || 'anthropic'}
-                            onChange={e => setAIProviders(prev => ({ ...prev, [task]: { ...cfg, provider: e.target.value, model: (PROVIDER_MODELS[e.target.value] || [])[0] || '' } }))}
-                            style={selectStyle}>
-                            <option value="anthropic">Anthropic (Claude)</option>
-                            <option value="openai">OpenAI (ChatGPT)</option>
-                            <option value="perplexity">Perplexity</option>
-                          </select>
-                        </div>
-                        <div>
-                          <FieldLabel>Model</FieldLabel>
-                          <select
-                            value={cfg.model || ''}
-                            onChange={e => setAIProviders(prev => ({ ...prev, [task]: { ...cfg, model: e.target.value } }))}
-                            style={selectStyle}>
-                            {models.map(m => <option key={m} value={m}>{m}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <FieldLabel>API Key</FieldLabel>
-                        <input
-                          type="password"
-                          value={cfg.apiKey || ''}
-                          onChange={e => setAIProviders(prev => ({ ...prev, [task]: { ...cfg, apiKey: e.target.value } }))}
-                          placeholder={`${cfg.provider === 'anthropic' ? 'sk-ant-...' : cfg.provider === 'openai' ? 'sk-...' : 'pplx-...'}`}
-                          style={{ ...inputStyle, fontFamily: "'DM Mono', monospace" }}
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* WRITING STYLE */}
-            {activeSection === 'writing' && (
-              <div>
-                <SectionTitle>Writing Style</SectionTitle>
-                <FieldLabel>Global Writing Style Prompt</FieldLabel>
-                <textarea
-                  value={settings.globalWritingPrompt || ''}
-                  onChange={e => setSettings(p => ({ ...p, globalWritingPrompt: e.target.value }))}
-                  rows={6}
-                  style={{ ...textareaStyle, marginBottom: 20 }}
-                  placeholder="Describe the tone, style, and audience for 1cw.org articles..."
-                />
-                <FieldLabel>Default Output Language</FieldLabel>
-                <select value={settings.language || 'English'} onChange={e => setSettings(p => ({ ...p, language: e.target.value }))}
-                  style={selectStyle}>
-                  <option>English</option>
-                  <option>Hindi</option>
-                  <option>Spanish</option>
-                  <option>French</option>
-                  <option>German</option>
-                  <option>Arabic</option>
-                </select>
-
-                <div style={{ marginTop: 20 }}>
-                  <FieldLabel>Batch Delay (ms between articles)</FieldLabel>
-                  <input type="number" min="0" max="5000" step="100"
-                    value={settings.batchDelay ?? 600}
-                    onChange={e => setSettings(p => ({ ...p, batchDelay: parseInt(e.target.value) }))}
-                    style={{ ...inputStyle, width: 120 }} />
-                  <div style={{ fontSize: 11, color: '#9c9a92', marginTop: 4 }}>
-                    Delay between items in batch generation to avoid rate limits. 500-1000ms recommended.
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* AUTHORS */}
-            {activeSection === 'authors' && (
-              <div>
-                <SectionTitle>Author Profiles</SectionTitle>
-                <div style={{ marginBottom: 16 }}>
-                  {authors.map((author, i) => (
-                    <div key={author.id} style={{ background: '#fdfcf9', border: '1px solid #dedad2', borderRadius: 8, padding: 14, marginBottom: 10 }}>
-                      {editingAuthor === author.id ? (
-                        <div>
-                          <input value={author.name} onChange={e => setAuthors(prev => prev.map(a => a.id === author.id ? { ...a, name: e.target.value } : a))}
-                            placeholder="Author name" style={{ ...inputStyle, marginBottom: 8 }} />
-                          <input value={author.wpUserId || ''} onChange={e => setAuthors(prev => prev.map(a => a.id === author.id ? { ...a, wpUserId: e.target.value } : a))}
-                            placeholder="WordPress User ID (from WP Users list)"
-                            style={{ ...inputStyle, marginBottom: 8, fontFamily: "'DM Mono', monospace" }} />
-                          <textarea value={author.style || ''} onChange={e => setAuthors(prev => prev.map(a => a.id === author.id ? { ...a, style: e.target.value } : a))}
-                            placeholder="Writing style description used in Claude prompt..." rows={3}
-                            style={{ ...textareaStyle, marginBottom: 8 }} />
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <Btn variant="primary" size="sm" onClick={() => setEditingAuthor(null)}>Done</Btn>
-                            <Btn variant="danger" size="sm" onClick={() => { setAuthors(prev => prev.filter(a => a.id !== author.id)); setEditingAuthor(null) }}>Delete</Btn>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <div style={{ fontSize: 14, fontWeight: 500, color: '#0d0d0d', marginBottom: 3 }}>{author.name}</div>
-                            {author.wpUserId && <div style={{ fontSize: 11, color: '#9c9a92', fontFamily: "'DM Mono', monospace" }}>WP User ID: {author.wpUserId}</div>}
-                            {author.style && <div style={{ fontSize: 12, color: '#9c9a92', marginTop: 4, fontStyle: 'italic' }}>{author.style.slice(0, 80)}...</div>}
-                          </div>
-                          <Btn variant="ghost" size="sm" onClick={() => setEditingAuthor(author.id)}>Edit</Btn>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <Btn variant="secondary" onClick={() => {
-                  const newAuthor = { id: 'a' + Date.now(), name: 'New Author', wpUserId: '', style: '' }
-                  setAuthors(prev => [...prev, newAuthor])
-                  setEditingAuthor(newAuthor.id)
-                }}>+ Add Author</Btn>
-
-                {wpCache.users?.length > 0 && (
-                  <div style={{ marginTop: 20, padding: 14, background: '#fdfcf9', border: '1px solid #dedad2', borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: '#9c9a92', marginBottom: 8 }}>WordPress users (for reference)</div>
-                    {wpCache.users.map(u => (
-                      <div key={u.id} style={{ fontSize: 12, color: '#5c5b57', padding: '3px 0' }}>
-                        ID: <span style={{ fontFamily: "'DM Mono', monospace" }}>{u.id}</span> — {u.name}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* SOURCES */}
-            {activeSection === 'sources' && (
-              <div>
-                <SectionTitle>Source Manager</SectionTitle>
-                {sources.map((src) => (
-                  <div key={src.id} style={{ background: '#fdfcf9', border: `1px solid ${src.active ? '#dedad2' : '#f0ede6'}`, borderRadius: 8, padding: 14, marginBottom: 12, opacity: src.active ? 1 : 0.6 }}>
-                    {editingSource === src.id ? (
-                      <SourceEditForm
-                        source={src}
-                        authors={authors}
-                        onChange={updated => setSources(prev => prev.map(s => s.id === src.id ? updated : s))}
-                        onDone={() => setEditingSource(null)}
-                        onDelete={() => { setSources(prev => prev.filter(s => s.id !== src.id)); setEditingSource(null) }}
-                      />
-                    ) : (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                            <div style={{ fontSize: 14, fontWeight: 500, color: '#0d0d0d' }}>{src.name}</div>
-                            <Badge color={src.type === 'youtube' ? 'red' : src.type === 'rss' ? 'blue' : 'gray'}>{src.type}</Badge>
-                            {!src.active && <Badge color="gray">Inactive</Badge>}
-                          </div>
-                          <div style={{ fontSize: 11, color: '#9c9a92', fontFamily: "'DM Mono', monospace", marginBottom: 4 }}>{src.url}</div>
-                          {src.primaryCategory && <Badge color="amber">{src.primaryCategory}</Badge>}
-                        </div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button onClick={() => setSources(prev => prev.map(s => s.id === src.id ? { ...s, active: !s.active } : s))}
-                            style={{ background: 'none', border: '1px solid #dedad2', borderRadius: 5, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#9c9a92' }}>
-                            {src.active ? 'Disable' : 'Enable'}
-                          </button>
-                          <Btn variant="ghost" size="sm" onClick={() => setEditingSource(src.id)}>Edit</Btn>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <Btn variant="secondary" onClick={() => {
-                  const newSrc = {
-                    id: 's' + Date.now(), name: 'New Source', url: '', type: 'rss', active: true,
-                    filterPrompt: '', writingPrompt: '', primaryCategory: '', additionalCategories: [],
-                    defaultAuthor: '', imageMode: 'pixabay', postFormat: 'standard', maxArticles: 5, schedule: 'manual',
-                  }
-                  setSources(prev => [...prev, newSrc])
-                  setEditingSource(newSrc.id)
-                }}>+ Add Source</Btn>
-              </div>
-            )}
-          </div>
+      <Topbar title="Settings" />
+      {/* Tab bar */}
+      <div style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface)', padding: '0 32px', display: 'flex', flexShrink: 0 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{
+              height: 38, padding: '0 14px', background: 'transparent', border: 'none',
+              cursor: 'pointer', fontSize: 13, fontWeight: tab === t.id ? 500 : 400,
+              color: tab === t.id ? 'var(--ink)' : 'var(--muted)',
+              borderBottom: `2px solid ${tab === t.id ? 'var(--accent)' : 'transparent'}`,
+              marginBottom: -1,
+            }}>{t.label}</button>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+        <div style={{ maxWidth: 860 }}>
+          {tab === 'sources' && <SourcesTab />}
+          {tab === 'wordpress' && <WordPressTab />}
+          {tab === 'models' && <ModelsTab />}
+          {tab === 'prompts' && <PromptsTab />}
+          {tab === 'authors' && <AuthorsTab />}
+          {tab === 'schedule' && <ScheduleTab />}
         </div>
       </div>
     </Layout>
   )
 }
 
-function SourceEditForm({ source, authors, onChange, onDone, onDelete }) {
-  const s = source
-  const set = (k, v) => onChange({ ...s, [k]: v })
-  const ALL_CATS = [
-    'Artificial Intelligence', 'XR, VR, AR – XROM', 'Blockchain', 'Quantum & Nanotechnology',
-    'Robotics & Automation', 'Automotive', 'Life Sciences & Biotechnology', 'Earth & Environment',
-    'Health & Medicine', 'Space & Astronomy', 'Startups & Entrepreneurship', 'Policy & Economy',
-    'Corporate Tech & Semiconductors', 'Telecom & Energy Tech',
-  ]
-  return (
+// ── Sources ─────────────────────────────────────────────
+function SourcesTab() {
+  const [sources, setSources] = useState(storage.getSources)
+  const [editing, setEditing] = useState(null)
+  const [form, setForm] = useState({})
+
+  function save() {
+    const updated = editing === 'new'
+      ? [...sources, { ...form, id: 's' + Date.now(), active: true }]
+      : sources.map(s => s.id === editing ? { ...s, ...form } : s)
+    setSources(updated); storage.setSources(updated); setEditing(null)
+  }
+  function del(id) { const u = sources.filter(s => s.id !== id); setSources(u); storage.setSources(u) }
+  function startEdit(src) { setForm({ ...src }); setEditing(src.id) }
+  function startNew() { setForm({ name: '', url: '', type: 'rss', active: true, maxArticles: 10, primaryCategory: '' }); setEditing('new') }
+  const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
+
+  if (editing) return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-        <div><FieldLabel>Name</FieldLabel><input value={s.name} onChange={e => set('name', e.target.value)} style={inputStyle} /></div>
-        <div>
-          <FieldLabel>Type</FieldLabel>
-          <select value={s.type} onChange={e => set('type', e.target.value)} style={selectStyle}>
-            <option value="rss">RSS Feed</option>
-            <option value="scrape">Scrape URL</option>
-            <option value="youtube">YouTube Channel</option>
-          </select>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <Btn variant="ghost" size="sm" leftIcon={<I name="chevronLeft" size={13} />} onClick={() => setEditing(null)}>Back</Btn>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>{editing === 'new' ? 'Add source' : `Edit: ${form.name}`}</div>
       </div>
-      <div style={{ marginBottom: 10 }}><FieldLabel>URL / Feed</FieldLabel><input value={s.url} onChange={e => set('url', e.target.value)} placeholder="https://..." style={{ ...inputStyle, fontFamily: "'DM Mono', monospace" }} /></div>
-      <div style={{ marginBottom: 10 }}>
-        <FieldLabel>Primary Category</FieldLabel>
-        <select value={s.primaryCategory || ''} onChange={e => set('primaryCategory', e.target.value)} style={selectStyle}>
-          <option value="">— Select —</option>
-          {ALL_CATS.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
-      <div style={{ marginBottom: 10 }}><FieldLabel>Filter Prompt (what to pull)</FieldLabel><textarea value={s.filterPrompt || ''} onChange={e => set('filterPrompt', e.target.value)} rows={3} placeholder="Only pull articles about..." style={textareaStyle} /></div>
-      <div style={{ marginBottom: 10 }}><FieldLabel>Writing Prompt (how to write)</FieldLabel><textarea value={s.writingPrompt || ''} onChange={e => set('writingPrompt', e.target.value)} rows={3} placeholder="Rewrite in a..." style={textareaStyle} /></div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
-        <div>
-          <FieldLabel>Post Format</FieldLabel>
-          <select value={s.postFormat || 'standard'} onChange={e => set('postFormat', e.target.value)} style={selectStyle}>
-            {['standard', 'video', 'audio', 'gallery'].map(f => <option key={f} value={f}>{f}</option>)}
-          </select>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div><FieldLabel label="Name" /><TextInput value={form.name || ''} onChange={v => f('name', v)} placeholder="TechCrunch" /></div>
+          <div><FieldLabel label="Type" />
+            <InlineSelect value={form.type || 'rss'} onChange={v => f('type', v)} options={[{value:'rss',label:'RSS'},{value:'scrape',label:'Scrape'},{value:'youtube',label:'YouTube'}]} style={{ width: '100%' }} />
+          </div>
         </div>
-        <div>
-          <FieldLabel>Image Mode</FieldLabel>
-          <select value={s.imageMode || 'pixabay'} onChange={e => set('imageMode', e.target.value)} style={selectStyle}>
-            <option value="pixabay">Pixabay</option>
-            <option value="source">From Source</option>
-            <option value="manual">Manual</option>
-          </select>
+        <div><FieldLabel label={form.type === 'youtube' ? 'Channel URL' : 'Feed URL'} />
+          <TextInput value={form.url || ''} onChange={v => f('url', v)} placeholder={form.type === 'rss' ? 'https://site.com/feed/' : form.type === 'youtube' ? 'https://www.youtube.com/@channel' : 'https://site.com/news'} mono />
         </div>
-        <div>
-          <FieldLabel>Max Articles</FieldLabel>
-          <input type="number" min="1" max="20" value={s.maxArticles || 5} onChange={e => set('maxArticles', parseInt(e.target.value))} style={inputStyle} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div><FieldLabel label="Primary category" />
+            <InlineSelect value={form.primaryCategory || ''} onChange={v => f('primaryCategory', v)} options={CATEGORIES.map(c => ({ value: c, label: c || '— None —' }))} style={{ width: '100%' }} />
+          </div>
+          <div><FieldLabel label="Max articles per pull" />
+            <TextInput value={String(form.maxArticles || 10)} onChange={v => f('maxArticles', parseInt(v) || 10)} mono />
+          </div>
         </div>
-      </div>
-      {authors.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          <FieldLabel>Default Author</FieldLabel>
-          <select value={s.defaultAuthor || ''} onChange={e => set('defaultAuthor', e.target.value)} style={selectStyle}>
-            <option value="">— Default —</option>
-            {authors.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
+        <div><FieldLabel label="Filter prompt" hint="What to include/exclude" />
+          <Textarea value={form.filterPrompt || ''} onChange={v => f('filterPrompt', v)} rows={2} placeholder="Only pull articles about AI and semiconductors. Skip opinion pieces." />
         </div>
-      )}
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <Btn variant="primary" size="sm" onClick={onDone}>Done</Btn>
-        <Btn variant="danger" size="sm" onClick={onDelete}>Delete Source</Btn>
+        <div><FieldLabel label="Writing prompt" hint="How to write articles from this source" />
+          <Textarea value={form.writingPrompt || ''} onChange={v => f('writingPrompt', v)} rows={3} placeholder="Focus on practical implications. Lead with impact. Under 600 words." />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div><FieldLabel label="Post format" />
+            <InlineSelect value={form.postFormat || 'standard'} onChange={v => f('postFormat', v)} options={POST_FORMATS.map(f => ({ value: f, label: f }))} style={{ width: '100%' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 20 }}>
+            <Switch checked={!!form.active} onChange={v => f('active', v)} />
+            <span style={{ fontSize: 13 }}>Active</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <Btn variant="primary" onClick={save}>Save source</Btn>
+          <Btn variant="secondary" onClick={() => setEditing(null)}>Cancel</Btn>
+        </div>
       </div>
     </div>
   )
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Content sources</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>RSS feeds, scraped sites, and YouTube channels the agent pulls from.</div>
+        </div>
+        <Btn variant="accent" leftIcon={<I name="plus" size={13} />} onClick={startNew}>Add source</Btn>
+      </div>
+      <div style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)', overflow: 'hidden' }}>
+        <div style={tableHeader}>
+          <span></span><span>Source</span><span>Type</span><span>Category</span><span>Max</span><span>Active</span>
+        </div>
+        {sources.map((s, i) => (
+          <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 100px 180px 60px 80px', gap: 12, padding: '11px 14px', borderTop: i > 0 ? '1px solid var(--border)' : 'none', alignItems: 'center', fontSize: 13, cursor: 'pointer' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
+            onMouseLeave={e => e.currentTarget.style.background = ''}
+            onClick={() => startEdit(s)}>
+            <I name={s.type === 'rss' ? 'rss' : s.type === 'youtube' ? 'youtube' : 'globe'} size={14} color={s.active ? 'var(--accent)' : 'var(--muted-2)'} />
+            <span style={{ fontWeight: 500 }}>{s.name}</span>
+            <Badge tone="mono" size="sm">{s.type}</Badge>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>{s.primaryCategory || '—'}</span>
+            <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--muted)' }}>{s.maxArticles || 10}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={e => e.stopPropagation()}>
+              <Switch checked={!!s.active} onChange={v => { const u = sources.map(x => x.id === s.id ? {...x, active: v} : x); setSources(u); storage.setSources(u) }} />
+              <Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); if (confirm('Delete ' + s.name + '?')) del(s.id) }}><I name="trash" size={12} color="var(--danger)" /></Btn>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
 }
 
-function SectionTitle({ children }) {
-  return <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 20, color: '#0d0d0d', marginBottom: 20, paddingBottom: 12, borderBottom: '1px solid #dedad2' }}>{children}</div>
-}
-function FieldLabel({ children }) {
-  return <label style={{ display: 'block', fontSize: 11, fontFamily: "'DM Mono', monospace", color: '#9c9a92', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>{children}</label>
+// ── WordPress ────────────────────────────────────────────
+function WordPressTab() {
+  const [wpUrl, setWpUrl] = useState(process.env.NEXT_PUBLIC_WP_URL || '')
+  const [testing, setTesting] = useState(false)
+  const [status, setStatus] = useState(null)
+  const [syncMsg, setSyncMsg] = useState('')
+
+  async function testConnection() {
+    setTesting(true); setStatus(null)
+    try {
+      const r = await fetch('/api/wordpress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'users/me', method: 'GET' }) })
+      const d = await r.json()
+      if (r.ok) setStatus({ ok: true, msg: `Connected as ${d.name} (${d.roles?.join(', ')})` })
+      else setStatus({ ok: false, msg: d.error || 'Connection failed' })
+    } catch (err) { setStatus({ ok: false, msg: err.message }) }
+    setTesting(false)
+  }
+
+  async function syncWPData() {
+    setSyncMsg('Syncing…')
+    try {
+      const [cats, tags, users] = await Promise.all([
+        fetch('/api/wordpress', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ endpoint: 'categories?per_page=100', method: 'GET' }) }).then(r => r.json()),
+        fetch('/api/wordpress', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ endpoint: 'tags?per_page=100', method: 'GET' }) }).then(r => r.json()),
+        fetch('/api/wordpress', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ endpoint: 'users?per_page=50', method: 'GET' }) }).then(r => r.json()),
+      ])
+      storage.setWPCache({ categories: Array.isArray(cats) ? cats : [], tags: Array.isArray(tags) ? tags : [], users: Array.isArray(users) ? users : [] })
+      setSyncMsg(`Synced: ${Array.isArray(cats) ? cats.length : 0} categories, ${Array.isArray(tags) ? tags.length : 0} tags, ${Array.isArray(users) ? users.length : 0} users`)
+    } catch (err) { setSyncMsg('Sync failed: ' + err.message) }
+    setTimeout(() => setSyncMsg(''), 4000)
+  }
+
+  const cache = storage.getWPCache()
+
+  return (
+    <>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>WordPress connection</div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>The agent publishes via the WP REST API using application passwords. Set credentials in Vercel environment variables.</div>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
+        {status && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: status.ok ? 'var(--success-soft)' : 'var(--danger-soft)', border: `1px solid ${status.ok ? '#bbf7d0' : '#fecaca'}`, borderRadius: 6, marginBottom: 20 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: status.ok ? 'var(--success)' : 'var(--danger)' }} />
+            <span style={{ fontSize: 13, color: status.ok ? 'var(--success)' : 'var(--danger)', fontWeight: 500 }}>{status.msg}</span>
+          </div>
+        )}
+        <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)', padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 6, marginBottom: 20 }}>
+          Set <code>WP_URL</code>, <code>WP_USER</code>, and <code>WP_PASSWORD</code> (application password) in Vercel → Project → Environment Variables.
+        </div>
+        {cache.fetchedAt > 0 && (
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>
+            Cache: {cache.categories?.length || 0} categories · {cache.tags?.length || 0} tags · {cache.users?.length || 0} users
+            <span style={{ marginLeft: 8, fontFamily: 'var(--mono)', fontSize: 11 }}>
+              (synced {new Date(cache.fetchedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })})
+            </span>
+          </div>
+        )}
+        {syncMsg && <div style={{ fontSize: 12, color: 'var(--accent)', fontFamily: 'var(--mono)', marginBottom: 12 }}>{syncMsg}</div>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Btn variant="secondary" onClick={testConnection} disabled={testing}>{testing ? <><Spinner size={12} /> Testing…</> : 'Test connection'}</Btn>
+          <Btn variant="primary" onClick={syncWPData}>Sync categories & tags</Btn>
+        </div>
+      </div>
+    </>
+  )
 }
 
-const inputStyle = {
-  width: '100%', padding: '8px 10px', border: '1px solid #dedad2', borderRadius: 6,
-  fontSize: 13, fontFamily: "'Sora', sans-serif", background: '#fdfcf9', color: '#0d0d0d', outline: 'none',
+// ── Models ───────────────────────────────────────────────
+function ModelsTab() {
+  const [providers, setProviders] = useState(storage.getAIProviders)
+  const [testing, setTesting] = useState({})
+  const [testResult, setTestResult] = useState({})
+
+  const SLOTS = [
+    { id: 'writing', label: 'Writing', desc: 'Main model that drafts each article from extracted facts.' },
+    { id: 'editing', label: 'Editing / SEO', desc: 'Extracts facts from source, generates SEO metadata and taxonomy.' },
+    { id: 'scraping', label: 'Web Research', desc: 'Reads source pages. Use Perplexity for live web search.' },
+  ]
+
+  const PROVIDER_OPTIONS = [
+    { value: 'anthropic', label: 'Anthropic' },
+    { value: 'openai',    label: 'OpenAI' },
+    { value: 'perplexity',label: 'Perplexity' },
+  ]
+
+  function update(slot, patch) {
+    const next = { ...providers, [slot]: { ...providers[slot], ...patch } }
+    if (patch.provider) next[slot].model = (PROVIDER_MODELS[patch.provider] || [])[0] || ''
+    setProviders(next); storage.setAIProviders(next)
+  }
+
+  async function testProvider(slot) {
+    const p = providers[slot]
+    if (!p?.apiKey) { setTestResult(r => ({ ...r, [slot]: { ok: false, msg: 'No API key' } })); return }
+    setTesting(t => ({ ...t, [slot]: true }))
+    try {
+      const headers = { 'Content-Type': 'application/json' }
+      let body, url
+      if (p.provider === 'anthropic') {
+        url = 'https://api.anthropic.com/v1/messages'
+        headers['x-api-key'] = p.apiKey; headers['anthropic-version'] = '2023-06-01'
+        body = JSON.stringify({ model: p.model || 'claude-haiku-4-5', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] })
+      } else {
+        url = p.provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : 'https://api.perplexity.ai/chat/completions'
+        headers['Authorization'] = `Bearer ${p.apiKey}`
+        body = JSON.stringify({ model: p.model, max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] })
+      }
+      const r = await fetch(url, { method: 'POST', headers, body })
+      setTestResult(res => ({ ...res, [slot]: r.ok ? { ok: true, msg: '✓ Connected' } : { ok: false, msg: `Error ${r.status}` } }))
+    } catch (err) { setTestResult(res => ({ ...res, [slot]: { ok: false, msg: err.message } })) }
+    setTesting(t => ({ ...t, [slot]: false }))
+  }
+
+  const estimatedCost = '$0.08–0.18 / article'
+
+  return (
+    <>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Models</div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>Configure each provider slot. Writing uses the most tokens — use a capable model. Editing is cheaper calls.</div>
+
+      <div style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)', overflow: 'hidden', marginBottom: 16 }}>
+        <div style={tableHeader2}><span>Slot</span><span>Provider</span><span>Model</span><span>API Key</span><span></span></div>
+        {SLOTS.map((slot, i) => {
+          const p = providers[slot.id] || {}
+          const models = (PROVIDER_MODELS[p.provider] || []).map(m => ({ value: m, label: m }))
+          const res = testResult[slot.id]
+          return (
+            <div key={slot.id} style={{ display: 'grid', gridTemplateColumns: '1fr 130px 220px 1fr 80px', gap: 12, padding: '14px', borderTop: i > 0 ? '1px solid var(--border)' : 'none', alignItems: 'start' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>{slot.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>{slot.desc}</div>
+                {res && <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: res.ok ? 'var(--success)' : 'var(--danger)', marginTop: 4 }}>{res.msg}</div>}
+              </div>
+              <InlineSelect size="sm" value={p.provider || 'anthropic'} onChange={v => update(slot.id, { provider: v })} options={PROVIDER_OPTIONS} style={{ width: '100%' }} />
+              <InlineSelect size="sm" value={p.model || ''} onChange={v => update(slot.id, { model: v })} options={models.length ? models : [{ value: '', label: 'Select model' }]} style={{ width: '100%' }} />
+              <TextInput size="sm" type="password" value={p.apiKey || ''} onChange={v => update(slot.id, { apiKey: v })} placeholder={p.provider === 'anthropic' ? 'sk-ant-…' : 'sk-…'} mono />
+              <Btn variant="secondary" size="sm" onClick={() => testProvider(slot.id)} disabled={testing[slot.id]}>
+                {testing[slot.id] ? <Spinner size={10} /> : 'Test'}
+              </Btn>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8 }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+          Estimated cost: <span style={{ fontFamily: 'var(--mono)', color: 'var(--ink)', fontWeight: 500 }}>{estimatedCost}</span>
+        </div>
+        <div>
+          <Btn variant="secondary" size="sm" onClick={() => { const def = storage.getAIProviders(); setProviders(def) }}>Reset to defaults</Btn>
+        </div>
+      </div>
+    </>
+  )
 }
-const textareaStyle = {
-  width: '100%', padding: '8px 10px', border: '1px solid #dedad2', borderRadius: 6,
-  fontSize: 13, fontFamily: "'Sora', sans-serif", background: '#fdfcf9', color: '#0d0d0d', outline: 'none',
-  resize: 'vertical', lineHeight: 1.6,
+
+// ── Prompts ──────────────────────────────────────────────
+function PromptsTab() {
+  const PROMPT_LIST = [
+    { id: 'global',   label: 'Global style',         desc: 'Applied as a system directive to every generation.' },
+    { id: 'article',  label: 'Article generation',   desc: 'Drives the full draft — structure, tone, length.' },
+    { id: 'title',    label: 'Title rewriting',      desc: 'Rewrites source headlines in 1cw voice.' },
+    { id: 'summary',  label: 'Summary / meta',       desc: 'Generates the excerpt and SEO description.' },
+    { id: 'image',    label: 'Featured image prompt',desc: 'Writes the prompt for the art model.' },
+  ]
+  const [active, setActive] = useState('global')
+  const [drafts, setDrafts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('1cw_prompts') || '{}') } catch { return {} }
+  })
+  const get = id => drafts[id] ?? DEFAULT_PROMPTS[id] ?? ''
+  const set = (id, v) => {
+    const next = { ...drafts, [id]: v }; setDrafts(next)
+    localStorage.setItem('1cw_prompts', JSON.stringify(next))
+  }
+  const current = get(active)
+
+  return (
+    <>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Prompts</div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>Per-stage prompts the agent sends to the model.</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
+        <div style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)', overflow: 'hidden' }}>
+          {PROMPT_LIST.map((p, i) => (
+            <button key={p.id} onClick={() => setActive(p.id)}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', background: active === p.id ? 'var(--accent-soft)' : 'transparent', border: 'none', borderTop: i > 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: active === p.id ? 'var(--accent)' : 'var(--ink)' }}>{p.label}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{p.desc}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{PROMPT_LIST.find(p => p.id === active)?.label}</div>
+            <Btn variant="ghost" size="sm" onClick={() => set(active, DEFAULT_PROMPTS[active] || '')}>Revert</Btn>
+          </div>
+          <Textarea value={current} onChange={v => set(active, v)} rows={14} mono />
+          <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--muted)', marginTop: 8 }}>
+            {current.length} chars · ~{Math.ceil(current.length / 4)} tokens
+          </div>
+        </div>
+      </div>
+    </>
+  )
 }
-const selectStyle = {
-  width: '100%', padding: '8px 10px', border: '1px solid #dedad2', borderRadius: 6,
-  fontSize: 13, fontFamily: "'Sora', sans-serif", background: '#fdfcf9', color: '#0d0d0d',
+
+// ── Authors ──────────────────────────────────────────────
+function AuthorsTab() {
+  const [authors, setAuthors] = useState(storage.getAuthors)
+  const [editing, setEditing] = useState(null)
+  const [form, setForm] = useState({})
+
+  function save() {
+    const u = editing === 'new' ? [...authors, { ...form, id: 'a' + Date.now() }] : authors.map(a => a.id === editing ? { ...a, ...form } : a)
+    setAuthors(u); storage.setAuthors(u); setEditing(null)
+  }
+
+  const wpCache = storage.getWPCache()
+  const wpUsers = wpCache.users || []
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Authors</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Bylines with per-author writing style overrides.</div>
+        </div>
+        <Btn variant="accent" leftIcon={<I name="plus" size={13} />} onClick={() => { setForm({ name: '', style: '', wpUserId: '' }); setEditing('new') }}>Add author</Btn>
+      </div>
+      {editing && (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 20, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+            <div><FieldLabel label="Name" /><TextInput value={form.name || ''} onChange={v => setForm(p => ({ ...p, name: v }))} /></div>
+            <div><FieldLabel label="WP User" />
+              <InlineSelect value={String(form.wpUserId || '')} onChange={v => setForm(p => ({ ...p, wpUserId: parseInt(v) || v }))}
+                options={[{ value: '', label: '— Select —' }, ...wpUsers.map(u => ({ value: String(u.id), label: u.name }))]} style={{ width: '100%' }} />
+            </div>
+          </div>
+          <div><FieldLabel label="Writing style" hint="Brief voice description" />
+            <Textarea value={form.style || ''} onChange={v => setForm(p => ({ ...p, style: v }))} rows={2} placeholder="More analytical, longer-form, academic citations preferred" />
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <Btn variant="primary" onClick={save}>Save</Btn>
+            <Btn variant="secondary" onClick={() => setEditing(null)}>Cancel</Btn>
+          </div>
+        </div>
+      )}
+      {authors.map(a => (
+        <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 16, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 8 }}>
+          <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--ink)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, flexShrink: 0 }}>
+            {a.name?.[0]?.toUpperCase() || '?'}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 500 }}>{a.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{a.style || 'Default style'}{a.wpUserId ? ` · WP #${a.wpUserId}` : ''}</div>
+          </div>
+          <Btn variant="ghost" size="sm" onClick={() => { setForm({ ...a }); setEditing(a.id) }}><I name="edit" size={12} /></Btn>
+          <Btn variant="ghost" size="sm" onClick={() => { const u = authors.filter(x => x.id !== a.id); setAuthors(u); storage.setAuthors(u) }}><I name="trash" size={12} color="var(--danger)" /></Btn>
+        </div>
+      ))}
+    </>
+  )
 }
+
+// ── Schedule ─────────────────────────────────────────────
+function ScheduleTab() {
+  const [settings, setSettings] = useState(storage.getSettings)
+  const u = (k, v) => { const n = { ...settings, [k]: v }; setSettings(n); storage.setSettings(n) }
+
+  return (
+    <>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Automation schedule</div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 20 }}>Let the agent pull, generate, and publish on its own.</div>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
+        {[
+          { key: 'autoPull', label: 'Auto-pull sources', desc: 'Fetch new articles from active sources automatically.', hasInterval: true, intervalKey: 'pullInterval', intervalOpts: ['30m','1h','2h','4h'] },
+          { key: 'autoGenerate', label: 'Auto-generate articles', desc: 'Rewrite new pulled articles without manual selection. Off by default.' },
+          { key: 'autoPublish', label: 'Auto-publish', desc: 'Push generated articles to WordPress.', hasInterval: true, intervalKey: 'publishStatus', intervalOpts: [{value:'draft',label:'As draft'},{value:'publish',label:'Publish live'}] },
+        ].map((item, i, arr) => (
+          <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: i < arr.length - 1 ? 16 : 0, marginBottom: i < arr.length - 1 ? 16 : 0, borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
+            <Switch checked={!!settings[item.key]} onChange={v => u(item.key, v)} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{item.desc}</div>
+            </div>
+            {item.hasInterval && settings[item.key] && (
+              <InlineSelect size="sm" value={settings[item.intervalKey] || item.intervalOpts[0]?.value || item.intervalOpts[0]}
+                onChange={v => u(item.intervalKey, v)}
+                options={(item.intervalOpts || []).map(o => typeof o === 'string' ? { value: o, label: o } : o)} />
+            )}
+          </div>
+        ))}
+
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Writing defaults</div>
+          <FieldLabel label="Global writing prompt" />
+          <Textarea value={settings.globalWritingPrompt || ''} onChange={v => u('globalWritingPrompt', v)} rows={4} />
+          <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <FieldLabel label="Batch delay (ms)" hint="Between articles in bulk generate" />
+              <TextInput value={String(settings.batchDelay ?? 600)} onChange={v => u('batchDelay', parseInt(v) || 600)} mono />
+            </div>
+            <div style={{ flex: 1 }}>
+              <FieldLabel label="Output language" />
+              <InlineSelect value={settings.language || 'English'} onChange={v => u('language', v)}
+                options={['English','Hindi','Spanish','French','German','Arabic'].map(l => ({ value: l, label: l }))} style={{ width: '100%' }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+const tableHeader = { display: 'grid', gridTemplateColumns: '24px 1fr 100px 180px 60px 80px', gap: 12, padding: '10px 14px', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }
+const tableHeader2 = { display: 'grid', gridTemplateColumns: '1fr 130px 220px 1fr 80px', gap: 12, padding: '10px 14px', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }
