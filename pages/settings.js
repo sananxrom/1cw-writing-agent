@@ -453,10 +453,8 @@ function ScheduleTab() {
         ))}
 
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Writing defaults</div>
-          <FieldLabel label="Global writing prompt" />
-          <Textarea value={settings.globalWritingPrompt || ''} onChange={v => u('globalWritingPrompt', v)} rows={4} />
-          <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
+          <div style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Generation defaults</div>
+          <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <FieldLabel label="Batch delay (ms)" hint="Between articles in bulk generate" />
               <TextInput value={String(settings.batchDelay ?? 600)} onChange={v => u('batchDelay', parseInt(v) || 600)} mono />
