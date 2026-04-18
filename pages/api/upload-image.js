@@ -4,7 +4,7 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { imageUrl, filename, altText } = req.body
+  const { imageUrl, filename, altText, caption, imageTitle } = req.body
   if (!imageUrl) return res.status(400).json({ error: 'imageUrl required' })
 
   const wpUrl = process.env.WP_URL?.replace(/\/$/, '')
@@ -40,16 +40,20 @@ export default async function handler(req, res) {
     const uploadData = await uploadRes.json()
     if (!uploadRes.ok) throw new Error(uploadData?.message || 'Upload failed')
 
-    // Set alt text if provided
-    if (altText && uploadData.id) {
+    // Set alt text, title, caption if provided
+    if ((altText || caption || imageTitle) && uploadData.id) {
+      const meta = {}
+      if (altText) meta.alt_text = altText
+      if (caption) meta.caption = caption
+      if (imageTitle) meta.title = imageTitle
       await fetch(`${wpUrl}/wp-json/wp/v2/media/${uploadData.id}`, {
         method: 'POST',
         headers: {
           'Authorization': `Basic ${credentials}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ alt_text: altText }),
-      })
+        body: JSON.stringify(meta),
+      }).catch(() => {})
     }
 
     return res.status(200).json({
