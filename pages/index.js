@@ -183,42 +183,45 @@ export default function Discover() {
     setSelected([])
     setView('generated')
 
-    for (const [idx, { link, item }] of toGenerate.entries()) {
-      const src = sources.find(s => s.id === item.sourceId)
-      try {
-        if (idx > 0) await new Promise(r => setTimeout(r, batchDelay))
-        let content = item.content || item.summary || ''
+    try {
+      for (const [idx, { link, item }] of toGenerate.entries()) {
+        const src = sources.find(s => s.id === item.sourceId)
         try {
-          const scraped = await scrapeArticle(item.link)
-          if (scraped.text?.length > content.length) content = scraped.text
-          if (!item.image && scraped.image) item.image = scraped.image
-        } catch {}
+          if (idx > 0) await new Promise(r => setTimeout(r, batchDelay))
+          let content = item.content || item.summary || ''
+          try {
+            const scraped = await scrapeArticle(item.link)
+            if (scraped.text?.length > content.length) content = scraped.text
+            if (!item.image && scraped.image) item.image = scraped.image
+          } catch {}
 
-        const authors = storage.getAuthors()
-        const authorObj = authors.find(a => a.id === src?.defaultAuthor)
-        const article = await generateArticle({
-          content, title: item.title, sourceUrl: item.link,
-          sourceName: item.sourceName || src?.name,
-          primaryCategory: src?.primaryCategory,
-          writingPrompt: src?.writingPrompt || settings.globalWritingPrompt,
-          authorStyle: authorObj?.style || '',
-          postFormat: src?.postFormat || 'standard', mode: 'rewrite',
-        }, { batchIndex: idx, batchDelay: 0 })
+          const authors = storage.getAuthors()
+          const authorObj = authors.find(a => a.id === src?.defaultAuthor)
+          const article = await generateArticle({
+            content, title: item.title, sourceUrl: item.link,
+            sourceName: item.sourceName || src?.name,
+            primaryCategory: src?.primaryCategory,
+            writingPrompt: src?.writingPrompt || settings.globalWritingPrompt,
+            authorStyle: authorObj?.style || '',
+            postFormat: src?.postFormat || 'standard', mode: 'rewrite',
+          }, { batchIndex: idx, batchDelay: 0 })
 
-        const full = { ...article, featuredImageUrl: item.image || '', sourceUrl: item.link, sourceName: item.sourceName || src?.name, videoUrl: src?.postFormat === 'video' ? item.link : '' }
-        fullArticles.current[link] = full
-        storage.addSeenUrl(item.link)
+          const full = { ...article, featuredImageUrl: item.image || '', sourceUrl: item.link, sourceName: item.sourceName || src?.name, videoUrl: src?.postFormat === 'video' ? item.link : '' }
+          fullArticles.current[link] = full
+          storage.addSeenUrl(item.link)
 
-        setGenerated(prev => prev.map(g =>
-          g.item.link === link ? { ...g, article: { ...full, body: full.body }, status: 'done' } : g
-        ))
-      } catch (err) {
-        setGenerated(prev => prev.map(g =>
-          g.item.link === link ? { ...g, status: 'error', error: err.message } : g
-        ))
+          setGenerated(prev => prev.map(g =>
+            g.item.link === link ? { ...g, article: { ...full, body: full.body }, status: 'done' } : g
+          ))
+        } catch (err) {
+          setGenerated(prev => prev.map(g =>
+            g.item.link === link ? { ...g, status: 'error', error: err.message.slice(0, 120) } : g
+          ))
+        }
       }
+    } finally {
+      generatingRef.current = false
     }
-    generatingRef.current = false
   }
 
   function openEditor(link) {
