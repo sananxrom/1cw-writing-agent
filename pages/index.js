@@ -55,6 +55,14 @@ export default function Discover() {
   const [createCategory, setCreateCategory] = useState('Artificial Intelligence')
   const [createLength, setCreateLength] = useState('medium')
   const [createGenerating, setCreateGenerating] = useState(false)
+  // Doc upload state
+  const [docFile, setDocFile] = useState(null)
+  const [docParsing, setDocParsing] = useState(false)
+  const [docPreview, setDocPreview] = useState([])  // parsed articles before import
+  const [docAuthorId, setDocAuthorId] = useState('')
+  const [docDefaultCategory, setDocDefaultCategory] = useState('')
+  const [docAutoDetect, setDocAutoDetect] = useState(true)
+  const docFileRef = useRef()
 
   const generatingRef = useRef(false)
   const fullArticles = useRef({})
@@ -117,9 +125,10 @@ export default function Discover() {
 
   const displayGenerated = useMemo(() => {
     let items = generated.filter(g => g.status === 'done' && !g.article?.wpPostId)
+    if (activeSource !== 'all') items = items.filter(g => g.item?.sourceId === activeSource)
     if (search) items = items.filter(g => (g.article?.title || g.item?.title)?.toLowerCase().includes(search.toLowerCase()))
     return items
-  }, [generated, search])
+  }, [generated, activeSource, search])
 
   const savedArticles = useMemo(() => {
     if (typeof window === 'undefined') return []
@@ -279,6 +288,93 @@ export default function Discover() {
         (x.item?.url || x.item?.link) === url ? { ...x, status: 'error', error: err.message.slice(0, 120) } : x
       ))
     }
+  }
+
+  async function handleDocParse(file) {
+    if (!file) return
+    setDocFile(file)
+    setDocParsing(true)
+    setDocPreview([])
+    try {
+      const providers = typeof window !== 'undefined'
+        ? JSON.parse(localStorage.getItem('1cw_ai_providers') || '{}') : {}
+      const ep = providers.editing || providers.writing || {}
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = e => resolve(e.target.result.split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      const res = await fetch('/api/parse-doc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          docBase64: base64,
+          docName: file.name,
+          provider: ep.provider || 'anthropic',
+          model: ep.model,
+          apiKey: ep.apiKey || null,
+          authorId: docAuthorId || null,
+          defaultCategory: docDefaultCategory || null,
+          autoDetect: docAutoDetect,
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setDocPreview(data.articles || [])
+      toast(`Found ${data.articles?.length || 0} articles in doc`)
+    } catch (err) {
+      toast('Parse failed: ' + err.message)
+    }
+    setDocParsing(false)
+  }
+
+  function handleDocImport(selectedIndices) {
+    const toImport = selectedIndices.map(i => docPreview[i]).filter(Boolean)
+    const settings = storage.getSettings()
+    const newGenerated = toImport.map((article, i) => {
+      const fakeUrl = `doc-${Date.now()}-${i}-${(article.title || '').slice(0, 20).replace(/\s+/g, '-')}`
+      const fakeItem = {
+        url: fakeUrl, link: fakeUrl,
+        title: article.title,
+        sourceName: article.fromDoc || 'Document',
+        sourceType: 'doc',
+        image: '',
+        content: article.body || '',
+        summary: article.body?.slice(0, 200) || '',
+      }
+      const full = {
+        title: article.title,
+        body: `<p>${(article.body || '').replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`,
+        excerpt: article.body?.slice(0, 200) || '',
+        primaryCategory: article.category || article.suggestedCategory || 'Artificial Intelligence',
+        sourceUrl: fakeUrl,
+        sourceName: article.fromDoc || 'Document',
+        wordCount: (article.body || '').split(/\s+/).filter(Boolean).length,
+        authorId: article.authorId || docAuthorId || '',
+        featuredImageUrl: article.imageDataUrl || '',
+        tagline: '',
+        seoTitle: article.title,
+        metaDescription: article.body?.slice(0, 155) || '',
+        focusKeyword: '',
+        slug: (article.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        regionTags: [],
+        keywordTags: [],
+      }
+      fullArticles.current[fakeUrl] = full
+      return {
+        item: fakeItem,
+        article: full,
+        status: 'done',
+        generatedAt: Date.now(),
+        id: 'doc-' + Date.now() + '-' + i,
+      }
+    })
+    setGenerated(prev => [...newGenerated, ...prev])
+    setDocPreview([])
+    setDocFile(null)
+    setTab('generated')
+    toast(`Imported ${newGenerated.length} articles → Generated tab`)
   }
 
   async function handleCreate() {
@@ -458,60 +554,150 @@ export default function Discover() {
         </div>
       </div>
 
-      {/* CREATE TAB — full width, no 3-column */}
+      {/* CREATE TAB */}
       {tab === 'create' && (
         <div style={{ flex: 1, overflow: 'auto', padding: '28px 40px' }}>
-          <div style={{ maxWidth: 720 }}>
+          <div style={{ maxWidth: 760 }}>
             <Segmented value={createMode} onChange={setCreateMode} options={[
               { value: 'url',   label: 'From URL',    icon: <I name="link" size={13} /> },
               { value: 'topic', label: 'From topic',  icon: <I name="sparkle" size={13} /> },
               { value: 'paste', label: 'Paste text',  icon: <I name="copy" size={13} /> },
+              { value: 'doc',   label: 'Upload doc',  icon: <I name="folder" size={13} /> },
             ]} />
-            <div style={{ marginTop: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 24 }}>
-              {createMode === 'url' && (
-                <>
-                  <FieldLabel label="Source URL" hint="Any news article, blog post, or press release" />
-                  <TextInput size="lg" value={createUrl} onChange={setCreateUrl} placeholder="https://example.com/article" icon="link" style={{ marginBottom: 8 }} />
-                  <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>Agent will scrape → detect category → rewrite in the 1cw.org voice.</div>
-                </>
-              )}
-              {createMode === 'topic' && (
-                <>
-                  <FieldLabel label="Topic or headline" />
-                  <TextInput size="lg" value={createTopic} onChange={setCreateTopic} placeholder="e.g. India's AI compute buildout in 2026" style={{ marginBottom: 14 }} />
-                  <FieldLabel label="Angle / thesis" hint="(optional)" />
-                  <Textarea value={createInstruction} onChange={setCreateInstruction} rows={3} placeholder="Your angle on the topic…" />
-                </>
-              )}
-              {createMode === 'paste' && (
-                <>
-                  <FieldLabel label="Source text" hint="Paste the article you want rewritten" />
-                  <Textarea value={createPaste} onChange={setCreatePaste} rows={8} placeholder="Paste source content here…" />
-                </>
-              )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
-                <div>
-                  <FieldLabel label="Category" />
-                  <InlineSelect value={createCategory} onChange={setCreateCategory} options={CATEGORIES.map(c => ({ value: c, label: c }))} style={{ width: '100%' }} />
+
+            {/* DOC UPLOAD MODE */}
+            {createMode === 'doc' && (
+              <div style={{ marginTop: 20 }}>
+                {/* Upload zone */}
+                {!docPreview.length && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 24 }}>
+                    <div style={{ marginBottom: 20 }}>
+                      <FieldLabel label="Upload .docx file" hint="Splits into individual articles automatically" />
+                      <div
+                        onClick={() => docFileRef.current?.click()}
+                        onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--accent)' }}
+                        onDragLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                        onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--border)'; const f = e.dataTransfer.files[0]; if (f) handleDocParse(f) }}
+                        style={{ border: '2px dashed var(--border)', borderRadius: 8, padding: '32px 20px', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                      >
+                        {docParsing ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                            <Spinner size={24} />
+                            <div style={{ fontSize: 13, color: 'var(--muted)' }}>Parsing document…</div>
+                          </div>
+                        ) : docFile ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                            <I name="folder" size={28} color="var(--accent)" />
+                            <div style={{ fontSize: 13, fontWeight: 500 }}>{docFile.name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{(docFile.size / 1024).toFixed(0)} KB</div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                            <I name="folder" size={28} color="var(--muted-2)" />
+                            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink-2)' }}>Drop .docx here or click to browse</div>
+                            <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>Word documents (.docx) only · up to 10MB</div>
+                          </div>
+                        )}
+                      </div>
+                      <input ref={docFileRef} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        style={{ display: 'none' }}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleDocParse(f) }}
+                      />
+                    </div>
+
+                    {/* Import options */}
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      <div>
+                        <FieldLabel label="Author" hint="Applied to all articles" />
+                        <InlineSelect value={docAuthorId} onChange={setDocAuthorId}
+                          options={[{value:'',label:'— None / Default —'}, ...storage.getAuthors().map(a => ({ value: a.id, label: a.name }))]}
+                          style={{ width: '100%' }} />
+                      </div>
+                      <div>
+                        <FieldLabel label="Category" hint="Override or auto-detect" />
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <InlineSelect value={docDefaultCategory} onChange={v => { setDocDefaultCategory(v); if (v) setDocAutoDetect(false) }}
+                            options={[{value:'',label:'— Auto-detect —'}, ...CATEGORIES.map(c => ({value:c,label:c}))]}
+                            style={{ flex: 1 }}
+                            disabled={docAutoDetect && !docDefaultCategory}
+                          />
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            <input type="checkbox" checked={docAutoDetect} onChange={e => { setDocAutoDetect(e.target.checked); if (e.target.checked) setDocDefaultCategory('') }} />
+                            Auto
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+                      <Btn variant="accent" size="lg" leftIcon={docParsing ? null : <I name="sparkle" size={14} />}
+                        onClick={() => docFile && handleDocParse(docFile)} disabled={!docFile || docParsing}>
+                        {docParsing ? <><Spinner size={13} /> Parsing…</> : 'Parse document'}
+                      </Btn>
+                    </div>
+                  </div>
+                )}
+
+                {/* Article preview after parsing */}
+                {docPreview.length > 0 && <DocPreview
+                  articles={docPreview}
+                  authors={storage.getAuthors()}
+                  onImport={handleDocImport}
+                  onReset={() => { setDocPreview([]); setDocFile(null) }}
+                />}
+              </div>
+            )}
+
+            {/* URL / TOPIC / PASTE modes */}
+            {createMode !== 'doc' && (
+              <div style={{ marginTop: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 24 }}>
+                {createMode === 'url' && (
+                  <>
+                    <FieldLabel label="Source URL" hint="Any news article, blog post, or press release" />
+                    <TextInput size="lg" value={createUrl} onChange={setCreateUrl} placeholder="https://example.com/article" icon="link" style={{ marginBottom: 8 }} />
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>Agent will scrape → detect category → rewrite in the 1cw.org voice.</div>
+                  </>
+                )}
+                {createMode === 'topic' && (
+                  <>
+                    <FieldLabel label="Topic or headline" />
+                    <TextInput size="lg" value={createTopic} onChange={setCreateTopic} placeholder="e.g. India's AI compute buildout in 2026" style={{ marginBottom: 14 }} />
+                    <FieldLabel label="Angle / thesis" hint="(optional)" />
+                    <Textarea value={createInstruction} onChange={setCreateInstruction} rows={3} placeholder="Your angle on the topic…" />
+                  </>
+                )}
+                {createMode === 'paste' && (
+                  <>
+                    <FieldLabel label="Source text" hint="Paste the article you want rewritten" />
+                    <Textarea value={createPaste} onChange={setCreatePaste} rows={8} placeholder="Paste source content here…" />
+                  </>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+                  <div>
+                    <FieldLabel label="Category" />
+                    <InlineSelect value={createCategory} onChange={setCreateCategory} options={CATEGORIES.map(c => ({ value: c, label: c }))} style={{ width: '100%' }} />
+                  </div>
+                  <div>
+                    <FieldLabel label="Length" />
+                    <Segmented value={createLength} onChange={setCreateLength} options={['short','medium','long'].map(v => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }))} />
+                  </div>
                 </div>
-                <div>
-                  <FieldLabel label="Length" />
-                  <Segmented value={createLength} onChange={setCreateLength} options={['short','medium','long'].map(v => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }))} />
+                {createMode !== 'topic' && (
+                  <div style={{ marginTop: 14 }}>
+                    <FieldLabel label="Writing instruction" hint="(optional override)" />
+                    <TextInput size="md" value={createInstruction} onChange={setCreateInstruction} placeholder="e.g. Focus on the India angle, keep under 400 words…" />
+                  </div>
+                )}
+                <div style={{ marginTop: 20, display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <Btn variant="accent" size="lg" leftIcon={createGenerating ? null : <I name="sparkle" size={14} />} onClick={handleCreate} disabled={createGenerating}>
+                    {createGenerating ? <><Spinner size={13} /> Generating…</> : 'Generate article'}
+                  </Btn>
+                  <span style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>Article appears in Generated tab</span>
                 </div>
               </div>
-              {createMode !== 'topic' && (
-                <div style={{ marginTop: 14 }}>
-                  <FieldLabel label="Writing instruction" hint="(optional override)" />
-                  <TextInput size="md" value={createInstruction} onChange={setCreateInstruction} placeholder="e.g. Focus on the India angle, keep under 400 words…" />
-                </div>
-              )}
-              <div style={{ marginTop: 20, display: 'flex', gap: 10, alignItems: 'center' }}>
-                <Btn variant="accent" size="lg" leftIcon={createGenerating ? null : <I name="sparkle" size={14} />} onClick={handleCreate} disabled={createGenerating}>
-                  {createGenerating ? <><Spinner size={13} /> Generating…</> : 'Generate article'}
-                </Btn>
-                <span style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>Article appears in Generated tab</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -520,7 +706,7 @@ export default function Discover() {
       {tab !== 'create' && (
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
           {/* Source sidebar — only for pulled */}
-          {tab === 'pulled' && !sidebarCollapsed && (
+          {['pulled','generated','saved'].includes(tab) && !sidebarCollapsed && (
             <div style={{ width: 190, flexShrink: 0, background: 'var(--surface)', borderRight: '1px solid var(--border)', padding: '10px 8px', overflow: 'auto' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px 8px' }}>
                 <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>Sources</span>
@@ -531,7 +717,9 @@ export default function Discover() {
               <SourceItem src={{ id: 'all', name: 'All sources', icon: 'inbox' }} active={activeSource === 'all'} count={displayPulled.length} onClick={() => setActiveSource('all')} />
               <div style={{ height: 6 }} />
               {sources.map(src => {
-                const count = pulled.filter(p => p.sourceId === src.id && !generatedUrls.has(p.url)).length
+                const pulledCount = pulled.filter(p => p.sourceId === src.id && !generatedUrls.has(p.url)).length
+                const genCount = generated.filter(g => g.item?.sourceId === src.id && g.status === 'done' && !g.article?.wpPostId).length
+                const count = tab === 'generated' ? genCount : pulledCount
                 return <SourceItem key={src.id} src={src} active={activeSource === src.id} count={count} loading={loadingSource[src.id]} onClick={() => setActiveSource(src.id)} />
               })}
               <div style={{ height: 10 }} />
@@ -545,7 +733,7 @@ export default function Discover() {
           <div style={{ flex: '0 0 42%', minWidth: 300, maxWidth: 480, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', background: 'var(--surface)' }}>
             {/* List header */}
             <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, height: 38, flexShrink: 0 }}>
-              {tab === 'pulled' && sidebarCollapsed && (
+              {['pulled','generated','saved'].includes(tab) && sidebarCollapsed && (
                 <button onClick={() => setSidebarCollapsed(false)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 5, padding: '3px 6px', cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center' }}>
                   <I name="chevronRight" size={12} />
                 </button>
@@ -923,6 +1111,78 @@ function WpArticlePreview({ item, tab, onEdit }) {
       {a.excerpt && <p style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, margin: '0 0 20px' }}>{a.excerpt}</p>}
       <div style={{ display: 'flex', gap: 8 }}>
         <Btn variant="primary" size="lg" leftIcon={<I name="edit" size={14} />} onClick={onEdit}>Open editor</Btn>
+      </div>
+    </div>
+  )
+}
+
+// ── Doc Preview — article selection before import ────────
+function DocPreview({ articles, authors, onImport, onReset }) {
+  const [selected, setSelected] = React.useState(articles.map((_, i) => i))
+  const toggle = (i) => setSelected(s => s.includes(i) ? s.filter(x => x !== i) : [...s, i])
+  const allSelected = selected.length === articles.length
+
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface-2)' }}>
+        <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : articles.map((_, i) => i))} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Found {articles.length} article{articles.length !== 1 ? 's' : ''}</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{selected.length} selected for import</div>
+        </div>
+        <Btn variant="secondary" size="sm" onClick={onReset}>← Back</Btn>
+        <Btn variant="accent" size="sm" disabled={!selected.length}
+          leftIcon={<I name="sparkle" size={12} />}
+          onClick={() => onImport(selected)}>
+          Import {selected.length} article{selected.length !== 1 ? 's' : ''}
+        </Btn>
+      </div>
+
+      {/* Article list */}
+      <div style={{ maxHeight: 500, overflow: 'auto' }}>
+        {articles.map((article, i) => (
+          <div key={i} onClick={() => toggle(i)}
+            style={{
+              display: 'flex', gap: 12, padding: '14px 20px',
+              borderBottom: i < articles.length - 1 ? '1px solid var(--border)' : 'none',
+              cursor: 'pointer', alignItems: 'flex-start',
+              background: selected.includes(i) ? 'var(--accent-soft)' : 'transparent',
+              transition: 'background 0.1s',
+            }}
+            onMouseEnter={e => { if (!selected.includes(i)) e.currentTarget.style.background = 'var(--surface-2)' }}
+            onMouseLeave={e => { if (!selected.includes(i)) e.currentTarget.style.background = 'transparent' }}
+          >
+            <input type="checkbox" checked={selected.includes(i)} onChange={() => toggle(i)} onClick={e => e.stopPropagation()} style={{ marginTop: 3 }} />
+
+            {/* Image preview if exists */}
+            {article.imageDataUrl && (
+              <div style={{ width: 56, height: 40, flexShrink: 0, borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <img src={article.imageDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            )}
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Badge tone="blue" size="sm">{(article.category || article.suggestedCategory || '').split('&')[0].trim()}</Badge>
+                {article.pubDate && <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)' }}>{article.pubDate}</span>}
+                {article.sourceName && <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)' }}>{article.sourceName}</span>}
+                <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted-2)', marginLeft: 'auto' }}>
+                  {(article.body || '').split(/\s+/).filter(Boolean).length}w
+                </span>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', lineHeight: 1.35, marginBottom: 3 }}>{article.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                {(article.body || '').slice(0, 200)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer note */}
+      <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface-2)', fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
+        Articles will be added to Generated tab. SEO fields auto-generated. Edit before publishing.
       </div>
     </div>
   )
