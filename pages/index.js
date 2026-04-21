@@ -215,16 +215,17 @@ export default function Discover() {
           } catch {}
 
           const authorObj = storage.getAuthors().find(a => a.id === src?.defaultAuthor)
+          const isYT = item.sourceType === 'youtube'
           const article = await generateArticle({
             content, title: item.title, sourceUrl: item.url,
             sourceName: item.sourceName || src?.name,
             primaryCategory: src?.primaryCategory,
             writingPrompt: src?.writingPrompt || settings.globalWritingPrompt,
             authorStyle: authorObj?.style || '',
-            postFormat: src?.postFormat || 'standard',
-            mode: item.sourceType === 'youtube' ? 'youtube' : 'rewrite',
+            postFormat: isYT ? 'video' : (src?.postFormat || 'standard'),
+            mode: isYT ? 'youtube' : 'rewrite',
           })
-          const full = { ...article, featuredImageUrl: item.image || '', sourceUrl: item.url, sourceName: item.sourceName || src?.name, videoUrl: item.sourceType === 'youtube' ? item.url : (src?.postFormat === 'video' ? item.url : '') }
+          const full = { ...article, featuredImageUrl: item.image || '', sourceUrl: item.url, sourceName: item.sourceName || src?.name, videoUrl: isYT ? item.url : (src?.postFormat === 'video' ? item.url : ''), postFormat: isYT ? 'video' : (src?.postFormat || 'standard') }
           fullArticles.current[url] = full
           storage.addSeenUrl(url)
           await updatePulledStatusDB([url], 'generated').catch(() => {})
@@ -267,7 +268,8 @@ export default function Discover() {
         postFormat: src?.postFormat || 'standard',
         mode: item.sourceType === 'youtube' ? 'youtube' : 'rewrite',
       })
-      const full = { ...article, featuredImageUrl: item.image || '', sourceUrl: url, sourceName: item.sourceName }
+      const isYT2 = item.sourceType === 'youtube'
+      const full = { ...article, featuredImageUrl: item.image || '', sourceUrl: url, sourceName: item.sourceName, videoUrl: isYT2 ? url : '', postFormat: isYT2 ? 'video' : (article.postFormat || 'standard') }
       fullArticles.current[url] = full
       setGenerated(prev => prev.map(x =>
         (x.item?.url || x.item?.link) === url ? { ...x, article: full, status: 'done' } : x
