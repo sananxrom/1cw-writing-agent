@@ -80,6 +80,94 @@ async function fetchScrape(source) {
   return links.slice(0, source.maxArticles || 10)
 }
 
+
+async function fetchYouTube(source) {
+  // Scrape YouTube channel page for latest videos — no API needed
+  const url = source.url.trim()
+  // Normalize: handle @handle, /channel/, /c/ formats
+  const channelUrl = url.includes('youtube.com') ? url : `https://www.youtube.com/${url}`
+  
+  const response = await fetch(channelUrl + '/videos', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+  })
+  if (!response.ok) throw new Error(`YouTube fetch HTTP ${response.status}`)
+  const html = await response.text()
+  
+  const videos = []
+  
+  // YouTube embeds video data in ytInitialData JSON
+  const match = html.match(/var ytInitialData = ({.+?});<\/script>/)
+  if (match) {
+    try {
+      const data = JSON.parse(match[1])
+      // Navigate the nested structure to find video items
+      const tabs = data?.contents?.twoColumnBrowseResultsRenderer?.tabs || []
+      for (const tab of tabs) {
+        const tabContent = tab?.tabRenderer?.content?.richGridRenderer?.contents || 
+                          tab?.tabRenderer?.content?.sectionListRenderer?.contents || []
+        for (const section of tabContent) {
+          const items = section?.richItemRenderer ? [section.richItemRenderer] :
+                       section?.itemSectionRenderer?.contents || []
+          for (const item of items) {
+            const video = item?.content?.videoRenderer || item?.videoRenderer
+            if (!video?.videoId) continue
+            const videoId = video.videoId
+            const title = video.title?.runs?.[0]?.text || video.title?.simpleText || ''
+            const thumb = video.thumbnail?.thumbnails?.slice(-1)[0]?.url || ''
+            const description = video.descriptionSnippet?.runs?.map(r => r.text).join('') || ''
+            const publishedText = video.publishedTimeText?.simpleText || ''
+            videos.push({
+              url: `https://www.youtube.com/watch?v=${videoId}`,
+              title,
+              summary: description || `Watch on YouTube: ${title}`,
+              image: (thumb || '').split('?')[0].replace('hqdefault', 'mqdefault') || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+              content: '',
+              pubDate: null, // YouTube doesn't give exact dates easily
+              sourceId: source.id,
+              sourceName: source.name,
+              sourceType: 'youtube',
+            })
+            if (videos.length >= (source.maxArticles || 10)) break
+          }
+          if (videos.length >= (source.maxArticles || 10)) break
+        }
+        if (videos.length) break
+      }
+    } catch (parseErr) {
+      console.error('[pull-source] YouTube parse error:', parseErr.message)
+    }
+  }
+  
+  // Fallback: scrape og:title links if ytInitialData parse failed
+  if (!videos.length) {
+    const $2 = cheerio.load(html)
+    $2('a[href*="/watch?v="]').each((_, el) => {
+      const href = $2(el).attr('href')
+      const title = $2(el).attr('title') || $2(el).text().trim()
+      if (!href || !title || title.length < 5) return
+      const videoId = href.match(/v=([^&]+)/)?.[1]
+      if (!videoId || videos.find(v => v.url.includes(videoId))) return
+      videos.push({
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        title,
+        summary: `YouTube video: ${title}`,
+        image: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+        content: '',
+        pubDate: null,
+        sourceId: source.id,
+        sourceName: source.name,
+        sourceType: 'youtube',
+      })
+      if (videos.length >= (source.maxArticles || 10)) return false
+    })
+  }
+  
+  return videos
+}
+
 export default async function handler(req, res) {
   if (req.method === 'DELETE') {
     const { urls } = req.body
@@ -116,6 +204,8 @@ export default async function handler(req, res) {
       try {
         if (source.type === 'rss') {
           items = await fetchRSS(source)
+        } else if (source.type === 'youtube') {
+          items = await fetchYouTube(source)
         } else if (source.type === 'scrape') {
           items = await fetchScrape(source)
         }
