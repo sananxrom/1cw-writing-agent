@@ -16,6 +16,7 @@ const CATEGORIES = [
 ]
 
 function loadGenerated() {
+  if (typeof window === 'undefined') return []
   try { return JSON.parse(localStorage.getItem(GEN_KEY) || '[]') } catch { return [] }
 }
 function saveGeneratedLocal(items) {
@@ -121,12 +122,12 @@ export default function Discover() {
   }, [generated, search])
 
   const savedArticles = useMemo(() => {
-    // Locally saved (not yet sent to WP)
+    if (typeof window === 'undefined') return []
     const keys = Object.keys(localStorage).filter(k => k.startsWith('1cw_local_'))
     return keys.map(k => {
       try { return JSON.parse(localStorage.getItem(k)) } catch { return null }
     }).filter(Boolean)
-  }, [tab])  // recompute when tab changes
+  }, [tab])
 
   const draftedArticles = useMemo(() =>
     wpHistory.filter(a => a.status === 'draft'), [wpHistory])
