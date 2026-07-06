@@ -68,6 +68,9 @@ export default function Settings() {
 function SourcesTab() {
   const [sources, setSources] = useState([])
   const [sourceSaving, setSourceSaving] = useState(false)
+  useEffect(() => {
+    storage.getSources().then(v => setSources(Array.isArray(v) ? v : [])).catch(() => {})
+  }, [])
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState({})
 
@@ -376,6 +379,9 @@ function PromptsTab() {
 // ── Authors ──────────────────────────────────────────────
 function AuthorsTab() {
   const [authors, setAuthors] = useState([])
+  useEffect(() => {
+    storage.getAuthors().then(v => setAuthors(Array.isArray(v) ? v : [])).catch(() => {})
+  }, [])
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState({})
 
@@ -436,6 +442,9 @@ function AuthorsTab() {
 // ── Schedule ─────────────────────────────────────────────
 function ScheduleTab() {
   const [settings, setSettings] = useState({})
+  useEffect(() => {
+    storage.getSettings().then(v => setSettings(v && typeof v === 'object' ? v : {})).catch(() => {})
+  }, [])
   const u = (k, v) => { const n = { ...settings, [k]: v }; setSettings(n); storage.setSettings(n) }
 
   return (
