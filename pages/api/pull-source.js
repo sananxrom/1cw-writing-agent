@@ -106,6 +106,9 @@ async function fetchYouTube(source) {
     const published = entry.match(/<published>([^<]+)<\/published>/)?.[1]
     const description = entry.match(/<media:description>([\s\S]*?)<\/media:description>/)?.[1]?.trim().slice(0, 300) || ''
     if (!videoId || !title) return null
+    // Skip shorts — title contains #shorts/#Shorts or description flags it
+    const isShort = title.toLowerCase().includes('#short') || description.toLowerCase().includes('#short')
+    if (isShort) return null
     return { url: `https://www.youtube.com/watch?v=${videoId}`, title, summary: description || `Watch: ${title}`, image: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`, content: '', pubDate: published || null, sourceId: source.id, sourceName: source.name, sourceType: 'youtube' }
   }).filter(Boolean)
 }
