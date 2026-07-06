@@ -9,6 +9,7 @@ import {
 
 export default async function handler(req, res) {
   const { resource } = req.query
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
 
   try {
     // ── Sources ──────────────────────────────────────────
