@@ -5,7 +5,7 @@ import Layout from '../components/Layout'
 import ArticleEditor from '../components/ArticleEditor'
 import { Btn, Badge, Spinner, EmptyState, Topbar, I, Tip, Checkbox, InlineSelect, TextInput, Segmented, Textarea, FieldLabel, relTime } from '../components/UI'
 import { pullSource, deletePulledFromDB, updatePulledStatusDB, scrapeArticle, generateArticle, saveToWordPress, resolveCategoryIds, resolveTagIds, fetchDbHistory } from '../lib/api'
-import { storage } from '../lib/storage'
+import { storage, migrateLocalToDb } from '../lib/storage'
 
 const GEN_KEY = '1cw_discover_generated'
 const CATEGORIES = [
@@ -64,6 +64,7 @@ export default function Discover() {
   const [docAutoDetect, setDocAutoDetect] = useState(true)
   const docFileRef = useRef()
 
+  const [seenUrls, setSeenUrls] = useState(() => typeof window !== 'undefined' ? storage.getSeenUrls() : new Set())
   const generatingRef = useRef(false)
   const fullArticles = useRef({})
 
@@ -71,16 +72,23 @@ export default function Discover() {
 
   useEffect(() => {
     // Load generated queue from DB (shared between users)
+    migrateLocalToDb().catch(() => {})
     storage.getGeneratedQueue().then(items => {
       if (items.length) {
         items.forEach(g => { if (g.article) fullArticles.current[g.item?.url || g.id] = g.article })
         setGenerated(items)
       }
     }).catch(() => {
-      // DB failed — fall back to localStorage
       const gen = loadGenerated()
       if (gen.length) setGenerated(gen)
     })
+    // Load seen URLs from DB for cross-session dedup
+    fetch('/api/seen-urls').then(r => r.json()).then(data => {
+      if (data.urls?.length) {
+        data.urls.forEach(u => storage.addSeenUrl(u))
+        setSeenUrls(new Set(data.urls))
+      }
+    }).catch(() => {})
     loadSources()
     document.addEventListener('visibilitychange', loadSources)
     return () => document.removeEventListener('visibilitychange', loadSources)
@@ -142,10 +150,10 @@ export default function Discover() {
 
   const displayPulled = useMemo(() => {
     let items = (activeSource === 'all' ? pulled : pulled.filter(p => p.sourceId === activeSource))
-      .filter(p => !generatedUrls.has(p.url))
+      .filter(p => !generatedUrls.has(p.url) && !seenUrls.has(p.url))
     if (search) items = items.filter(i => i.title?.toLowerCase().includes(search.toLowerCase()))
     return items
-  }, [pulled, activeSource, generatedUrls, search])
+  }, [pulled, activeSource, generatedUrls, seenUrls, search])
 
   const displayGenerated = useMemo(() => {
     let items = generated.filter(g => g.status === 'done' && !g.article?.wpPostId)
@@ -263,6 +271,7 @@ export default function Discover() {
           const full = { ...article, featuredImageUrl: item.image || '', sourceUrl: item.url, sourceName: item.sourceName || src?.name, videoUrl: isYT ? item.url : (src?.postFormat === 'video' ? item.url : ''), postFormat: isYT ? 'video' : (src?.postFormat || 'standard') }
           fullArticles.current[url] = full
           storage.addSeenUrl(url)
+          setSeenUrls(prev => new Set([...prev, url]))
           await updatePulledStatusDB([url], 'generated').catch(() => {})
           setGenerated(prev => prev.map(g =>
             (g.item?.url || g.item?.link) === url ? { ...g, article: full, status: 'done' } : g
