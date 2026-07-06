@@ -1,5 +1,6 @@
 // pages/api/data.js — unified CRUD for shared data
 // sources, authors, settings, generated_queue
+import { initDb } from '../../lib/db'
 import {
   getSources, upsertSource, deleteSources,
   getAuthors, upsertAuthor, deleteAuthor,
@@ -12,6 +13,7 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
 
   try {
+    await initDb()
     // ── Sources ──────────────────────────────────────────
     if (resource === 'sources') {
       if (req.method === 'GET') {
