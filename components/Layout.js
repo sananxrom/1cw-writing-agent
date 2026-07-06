@@ -136,39 +136,57 @@ function PipelineDots({ counts }) {
 }
 
 
-function ProfileDot() {
-  const [profile, setProfileState] = useState({ slot: '1' })
-  const [open, setOpen] = useState(false)
-  useEffect(() => { setProfileState(storage.getProfile()) }, [])
+const USERS = ['Sanan', 'Eddie']
 
-  function switchTo(slot) {
-    const p = { slot }
-    storage.setProfile(p)
-    setProfileState(p)
-    setOpen(false)
+function ProfileDot() {
+  const [profile, setProfileState] = useState({})
+  const [open, setOpen] = useState(false)
+  const [switching, setSwitching] = useState(false)
+  const [switchUser, setSwitchUser] = useState('')
+  const [switchPass, setSwitchPass] = useState('')
+  const [switchErr, setSwitchErr] = useState('')
+  const [switching2, setSwitching2] = useState(false)
+
+  useEffect(() => { setProfileState(storage.getProfile() || {}) }, [])
+
+  async function doSwitch() {
+    if (!switchUser || !switchPass) { setSwitchErr('Select user and enter password'); return }
+    setSwitching2(true); setSwitchErr('')
+    const r = await fetch('/api/auth', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ user: switchUser, password: switchPass }) })
+    const d = await r.json()
+    if (!r.ok) { setSwitchErr(d.error || 'Wrong password'); setSwitching2(false); return }
+    storage.setProfile({ slot: d.slot, name: d.name, authed: true })
+    setProfileState({ slot: d.slot, name: d.name, authed: true })
+    setSwitching(false); setSwitchPass(''); setSwitchErr(''); setSwitching2(false)
+    window.location.reload()
   }
 
-  const label = profile.slot === '1' ? 'U1' : 'U2'
-  const color = profile.slot === '1' ? '#6366f1' : '#f59e0b'
+  const initials = (profile.name || 'U')[0].toUpperCase()
+  const color = profile.name === 'Sanan' ? '#6366f1' : '#f59e0b'
 
   return (
     <div style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(o => !o)} title={`Profile: User ${profile.slot}`}
-        style={{ width: 26, height: 26, borderRadius: '50%', background: color, color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700, fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
-        {label}
+      <button onClick={() => { setSwitching(true); setOpen(false) }} title={profile.name || 'User'}
+        style={{ width: 26, height: 26, borderRadius: '50%', background: color, color: '#fff', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+        {initials}
       </button>
-      {open && (
-        <div style={{ position: 'absolute', left: '100%', bottom: 0, marginLeft: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, width: 140, boxShadow: 'var(--shadow-lg)', zIndex: 200 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 6px 6px' }}>Switch profile</div>
-          {['1', '2'].map(slot => (
-            <button key={slot} onClick={() => switchTo(slot)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px', background: profile.slot === slot ? 'var(--accent-soft)' : 'transparent', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: 'var(--ink)', textAlign: 'left' }}>
-              <div style={{ width: 16, height: 16, borderRadius: '50%', background: slot === '1' ? '#6366f1' : '#f59e0b', flexShrink: 0 }} />
-              User {slot} {profile.slot === slot ? '✓' : ''}
-            </button>
-          ))}
-          <div style={{ fontSize: 10, color: 'var(--muted)', padding: '6px 8px 2px', fontFamily: 'var(--mono)', borderTop: '1px solid var(--border)', marginTop: 4 }}>
-            Credentials from Vercel env
+
+      {switching && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 28, width: 300, boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Switch user</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              {USERS.map(u => (
+                <button key={u} onClick={() => setSwitchUser(u)} style={{ flex: 1, padding: '8px 0', borderRadius: 7, border: `2px solid ${switchUser===u?'var(--accent)':'var(--border)'}`, background: switchUser===u?'var(--accent-soft)':'transparent', cursor: 'pointer', fontSize: 13, fontWeight: switchUser===u?600:400, color: switchUser===u?'var(--accent)':'var(--ink)' }}>{u}</button>
+              ))}
+            </div>
+            <input type="password" placeholder="Password" value={switchPass} onChange={e=>setSwitchPass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSwitch()}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1px solid var(--border)', fontSize: 13, outline: 'none', marginBottom: 10, boxSizing: 'border-box', background: 'var(--surface)', color: 'var(--ink)' }} />
+            {switchErr && <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>{switchErr}</div>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { setSwitching(false); setSwitchPass(''); setSwitchErr('') }} style={{ flex: 1, padding: '8px 0', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+              <button onClick={doSwitch} disabled={switching2} style={{ flex: 1, padding: '8px 0', borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{switching2 ? '…' : 'Switch'}</button>
+            </div>
           </div>
         </div>
       )}
