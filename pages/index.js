@@ -257,7 +257,8 @@ export default function Discover() {
         try {
           if (idx > 0) await new Promise(r => setTimeout(r, settings.batchDelay ?? 600))
           let content = item.content || item.summary || ''
-          if (item.sourceType === 'youtube') {
+          const effectiveType = item.sourceType || (sources.find(s=>s.id===item.sourceId)?.type)
+          if (effectiveType === 'youtube') {
             // Fetch transcript for YouTube videos
             try {
               const videoId = item.url.match(/[?&]v=([^&]+)/)?.[1]
@@ -439,7 +440,22 @@ export default function Discover() {
       const settings = await storage.getSettings().catch(() => ({}))
       let content = createPaste
       let title = createTopic
-      if (createMode === 'url' && createUrl) {
+      let videoUrl = ''
+      if (createMode === 'youtube' && createUrl) {
+        videoUrl = createUrl
+        const videoId = createUrl.match(/[?&]v=([^&]+)/)?.[1] || createUrl.match(/youtu\.be\/([^?]+)/)?.[1]
+        if (videoId) {
+          try {
+            const tr = await fetch('/api/yt-transcript', {
+              method: 'POST', headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ videoId })
+            }).then(r=>r.json())
+            content = tr.transcript?.length > 100 ? `Transcript:
+${tr.transcript}` : ''
+          } catch {}
+        }
+        title = title || createUrl
+      } else if (createMode === 'url' && createUrl) {
         try {
           const scraped = await scrapeArticle(createUrl)
           content = scraped.text || ''
@@ -453,11 +469,12 @@ export default function Discover() {
         sourceUrl: createMode === 'url' ? createUrl : '',
         primaryCategory: createCategory,
         writingPrompt: (createInstruction ? createInstruction + ' ' : '') + lengthPrompt,
-        mode: createMode === 'url' ? 'rewrite' : 'create',
+        postFormat: createMode === 'youtube' ? 'video' : 'standard',
+        mode: createMode === 'youtube' ? 'youtube' : createMode === 'url' ? 'rewrite' : 'create',
       })
       // Add to generated queue
-      const fakeItem = { url: createUrl || 'create-' + Date.now(), title: title || createTopic, sourceName: 'Created', sourceType: 'create', image: '' }
-      const full = { ...article, featuredImageUrl: '', sourceUrl: fakeItem.url, sourceName: 'Created' }
+      const fakeItem = { url: createUrl || 'create-' + Date.now(), title: title || createTopic, sourceName: createMode === 'youtube' ? 'YouTube' : 'Created', sourceType: createMode === 'youtube' ? 'youtube' : 'create', image: '' }
+      const full = { ...article, featuredImageUrl: '', sourceUrl: fakeItem.url, sourceName: fakeItem.sourceName, videoUrl: videoUrl || '', postFormat: createMode === 'youtube' ? 'video' : 'standard' }
       fullArticles.current[fakeItem.url] = full
       setGenerated(prev => [{ item: fakeItem, article: full, status: 'done', generatedAt: Date.now(), id: 'c' + Date.now() }, ...prev])
       setTab('generated')
@@ -633,10 +650,11 @@ export default function Discover() {
         <div style={{ flex: 1, overflow: 'auto', padding: '28px 40px' }}>
           <div style={{ maxWidth: 760 }}>
             <Segmented value={createMode} onChange={setCreateMode} options={[
-              { value: 'url',   label: 'From URL',    icon: <I name="link" size={13} /> },
-              { value: 'topic', label: 'From topic',  icon: <I name="sparkle" size={13} /> },
-              { value: 'paste', label: 'Paste text',  icon: <I name="copy" size={13} /> },
-              { value: 'doc',   label: 'Upload doc',  icon: <I name="folder" size={13} /> },
+              { value: 'url',     label: 'From URL',    icon: <I name="link" size={13} /> },
+              { value: 'youtube', label: 'YouTube',     icon: <I name="youtube" size={13} /> },
+              { value: 'topic',   label: 'From topic',  icon: <I name="sparkle" size={13} /> },
+              { value: 'paste',   label: 'Paste text',  icon: <I name="copy" size={13} /> },
+              { value: 'doc',     label: 'Upload doc',  icon: <I name="folder" size={13} /> },
             ]} />
 
             {/* DOC UPLOAD MODE */}
@@ -724,9 +742,16 @@ export default function Discover() {
               </div>
             )}
 
-            {/* URL / TOPIC / PASTE modes */}
+            {/* URL / TOPIC / PASTE / YOUTUBE modes */}
             {createMode !== 'doc' && (
               <div style={{ marginTop: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 24 }}>
+                {createMode === 'youtube' && (
+                  <>
+                    <FieldLabel label="YouTube video URL" hint="Paste any YouTube video link" />
+                    <TextInput size="lg" value={createUrl} onChange={setCreateUrl} placeholder="https://www.youtube.com/watch?v=..." icon="link" style={{ marginBottom: 8 }} />
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>Fetches transcript → writes article → sets video format for WordPress.</div>
+                  </>
+                )}
                 {createMode === 'url' && (
                   <>
                     <FieldLabel label="Source URL" hint="Any news article, blog post, or press release" />
