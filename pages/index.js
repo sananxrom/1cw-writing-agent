@@ -562,17 +562,20 @@ export default function Discover() {
                 {isLoading ? <Spinner size={12} /> : null} Refresh
               </Btn>
             </>}
-            {selected.length > 0 && tab === 'pulled' && (
-              <div style={{display:'flex',gap:6}}>
-                <Btn variant="accent" size="sm" leftIcon={<I name="sparkle" size={13} />} onClick={() => generate(selected)}>
-                  Generate {selected.length}
-                </Btn>
-                <Btn variant="danger" size="sm" onClick={() => askDelete(selected, 'pulled')}>
-                  Delete {selected.length}
-                </Btn>
-                <button onClick={() => { setSelected([]); setBulk([]) }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13}}>✕</button>
-              </div>
-            )}
+            {(selected.length > 0 || bulk.length > 0) && tab === 'pulled' && (() => {
+              const sel = [...new Set([...selected, ...bulk])]
+              return (
+                <div style={{display:'flex',gap:6}}>
+                  <Btn variant="accent" size="sm" leftIcon={<I name="sparkle" size={13} />} onClick={() => generate(sel)}>
+                    Generate {sel.length}
+                  </Btn>
+                  <Btn variant="danger" size="sm" onClick={() => askDelete(sel, 'pulled')}>
+                    Delete {sel.length}
+                  </Btn>
+                  <button onClick={() => { setSelected([]); setBulk([]) }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13}}>✕</button>
+                </div>
+              )
+            })()}
             {bulk.length > 0 && tab === 'generated' && (
               <div style={{ display: 'flex', gap: 6 }}>
                 <Btn variant="secondary" size="sm" disabled={bulkWorking} onClick={() => quickSave(bulk, 'draft')}>Draft {bulk.length}</Btn>
