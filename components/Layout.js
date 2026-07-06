@@ -1,6 +1,7 @@
 // components/Layout.js — Slim sidebar (Option 3)
 // Brand + pipeline status + Create + Sources + Settings only
 import { useState, useEffect } from 'react'
+import { storage } from '../lib/storage'
 import { useRouter } from 'next/router'
 import { I, Kbd, Spinner, Toast } from './UI'
 
@@ -58,6 +59,9 @@ export default function Layout({ children, counts = {}, onCreateClick, onSources
 
         {/* WP status dot */}
         <div title="1cw.org connected" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', margin: '8px 0 4px', boxShadow: '0 0 0 3px rgba(22,163,74,0.15)' }} />
+
+        {/* Profile switcher */}
+        <ProfileDot />
       </div>
 
       {/* Main content */}
@@ -131,6 +135,47 @@ function PipelineDots({ counts }) {
           <span style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--ink-2)', fontWeight: 600 }}>{s.count}</span>
         </div>
       ))}
+    </div>
+  )
+}
+
+
+function ProfileDot() {
+  const [profile, setProfileState] = useState({ slot: '1' })
+  const [open, setOpen] = useState(false)
+  useEffect(() => { setProfileState(storage.getProfile()) }, [])
+
+  function switchTo(slot) {
+    const p = { slot }
+    storage.setProfile(p)
+    setProfileState(p)
+    setOpen(false)
+  }
+
+  const label = profile.slot === '1' ? 'U1' : 'U2'
+  const color = profile.slot === '1' ? '#6366f1' : '#f59e0b'
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} title={`Profile: User ${profile.slot}`}
+        style={{ width: 26, height: 26, borderRadius: '50%', background: color, color: '#fff', border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700, fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+        {label}
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', left: '100%', bottom: 0, marginLeft: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 8, width: 140, boxShadow: 'var(--shadow-lg)', zIndex: 200 }}>
+          <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted-2)', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 6px 6px' }}>Switch profile</div>
+          {['1', '2'].map(slot => (
+            <button key={slot} onClick={() => switchTo(slot)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px', background: profile.slot === slot ? 'var(--accent-soft)' : 'transparent', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: 'var(--ink)', textAlign: 'left' }}>
+              <div style={{ width: 16, height: 16, borderRadius: '50%', background: slot === '1' ? '#6366f1' : '#f59e0b', flexShrink: 0 }} />
+              User {slot} {profile.slot === slot ? '✓' : ''}
+            </button>
+          ))}
+          <div style={{ fontSize: 10, color: 'var(--muted)', padding: '6px 8px 2px', fontFamily: 'var(--mono)', borderTop: '1px solid var(--border)', marginTop: 4 }}>
+            Credentials from Vercel env
+          </div>
+        </div>
+      )}
     </div>
   )
 }
