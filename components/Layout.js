@@ -36,13 +36,9 @@ export default function Layout({ children, counts = {}, onCreateClick, onSources
         padding: '12px 0', gap: 4,
       }}>
         {/* Brand mark */}
-        <div onClick={() => router.push('/')} style={{
-          width: 30, height: 30, borderRadius: 6,
-          background: 'var(--ink)', color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontWeight: 700, fontSize: 10, letterSpacing: '-0.02em',
-          cursor: 'pointer', marginBottom: 8, flexShrink: 0,
-        }}>1cw</div>
+        <div onClick={() => router.push('/')} style={{ cursor: 'pointer', marginBottom: 8, flexShrink: 0, width: 32, height: 32, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <img src="/logo.svg" alt="1CW" style={{ width: 28, height: 28, objectFit: 'contain' }} />
+        </div>
 
         {/* Discover */}
         <NavIcon icon="inbox" label="Discover" active={isDiscover} kbd="1" onClick={() => router.push('/')} />
