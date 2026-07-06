@@ -377,7 +377,9 @@ function AuthorsTab() {
 
   function save() {
     const u = editing === 'new' ? [...authors, { ...form, id: 'a' + Date.now() }] : authors.map(a => a.id === editing ? { ...a, ...form } : a)
-    setAuthors(u); storage.setAuthors(u); setEditing(null)
+    const authorTarget = editing === 'new' ? { ...form, id: 'a' + Date.now() } : { ...authors.find(a=>a.id===editing), ...form }
+    setAuthors(u)
+    storage.saveAuthor(authorTarget).then(() => setEditing(null)).catch(() => setEditing(null))
   }
 
   const wpCache = storage.getWPCache()
