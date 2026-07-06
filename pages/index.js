@@ -34,7 +34,9 @@ export default function Discover() {
   const [bulk, setBulk] = useState([])
   const [generated, setGenerated] = useState([])
   const [wpHistory, setWpHistory] = useState([])    // drafted + published from DB
+  const [pageLoading, setPageLoading] = useState(true)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [savingUrls, setSavingUrls] = useState({})
   const [tab, setTab] = useState('pulled')
   const [activeSource, setActiveSource] = useState('all')
   const [selectedId, setSelectedId] = useState(null)
@@ -72,6 +74,7 @@ export default function Discover() {
 
   useEffect(() => {
     // Load generated queue from DB (shared between users)
+    setPageLoading(true)
     migrateLocalToDb().catch(() => {})
     storage.getGeneratedQueue().then(items => {
       if (items.length) {
@@ -81,7 +84,7 @@ export default function Discover() {
     }).catch(() => {
       const gen = loadGenerated()
       if (gen.length) setGenerated(gen)
-    })
+    }).finally(() => setPageLoading(false))
     // Load seen URLs from DB for cross-session dedup
     fetch('/api/seen-urls').then(r => r.json()).then(data => {
       if (data.urls?.length) {
@@ -203,6 +206,7 @@ export default function Discover() {
 
   async function quickSave(urls, status) {
     setBulkWorking(true)
+    setSavingUrls(prev => { const n={...prev}; urls.forEach(u=>n[u]=status); return n })
     const cache = storage.getWPCache()
     for (const url of urls) {
       const g = generated.find(x => (x.item?.url || x.item?.link) === url)
@@ -224,6 +228,7 @@ export default function Discover() {
       } catch (err) { toast('Error: ' + err.message) }
     }
     setBulk([]); setBulkWorking(false)
+    setSavingUrls({})
     if (status === 'draft') setTab('drafted')
     else if (status === 'publish') setTab('published')
   }
@@ -514,6 +519,15 @@ export default function Discover() {
 
   return (
     <Layout counts={pipelineCounts}>
+      {/* Page loading overlay */}
+      {pageLoading && (
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--bg)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--ink)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>1cw</div>
+          <Spinner size={18} />
+          <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>Loading workspace…</div>
+        </div>
+      )}
+
       {/* Confirm delete */}
       {confirmDelete && (
         <div onClick={() => setConfirmDelete(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(10,10,10,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -941,7 +955,7 @@ function PulledRow({ item, selected, checked, onClick, onCheck, onGenerate, onDe
 }
 
 // ── Generated row ────────────────────────────────────────
-function GeneratedRow({ g, selected, checked, onClick, onCheck, onEdit, onQuickSave, onDelete, onCancel, onRetry }) {
+function GeneratedRow({ g, selected, checked, saving, onClick, onCheck, onEdit, onQuickSave, onDelete, onCancel, onRetry }) {
   const [hover, setHover] = useState(false)
   const isDone = g.status === 'done'
   const url = g.item?.url || g.item?.link
@@ -979,8 +993,8 @@ function GeneratedRow({ g, selected, checked, onClick, onCheck, onEdit, onQuickS
         {g.status === 'error' && <Tip label="Retry"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onRetry?.() }}><I name="refresh" size={12} color="var(--accent)" /></Btn></Tip>}
         {isDone && (hover || selected) && <>
           <Tip label="Edit"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onEdit() }}><I name="edit" size={12} /></Btn></Tip>
-          <Tip label="Draft"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onQuickSave('draft') }}><I name="copy" size={12} /></Btn></Tip>
-          <Tip label="Publish"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onQuickSave('publish') }}><I name="wordpress" size={12} color="var(--accent)" /></Btn></Tip>
+          <Tip label="Draft"><Btn variant="ghost" size="xs" disabled={!!saving} onClick={e => { e.stopPropagation(); onQuickSave('draft') }}>{saving==='draft' ? <Spinner size={10}/> : <I name="copy" size={12} />}</Btn></Tip>
+          <Tip label="Publish"><Btn variant="ghost" size="xs" disabled={!!saving} onClick={e => { e.stopPropagation(); onQuickSave('publish') }}>{saving==='publish' ? <Spinner size={10}/> : <I name="wordpress" size={12} color="var(--accent)" />}</Btn></Tip>
         </>}
         {(isDone || g.status === 'error') && (hover || selected) && (
           <Tip label="Delete"><Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); onDelete() }}><I name="trash" size={12} color="var(--danger)" /></Btn></Tip>
