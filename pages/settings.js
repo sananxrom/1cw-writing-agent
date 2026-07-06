@@ -257,19 +257,13 @@ function ModelsTab() {
     if (!p?.apiKey) { setTestResult(r => ({ ...r, [slot]: { ok: false, msg: 'No API key' } })); return }
     setTesting(t => ({ ...t, [slot]: true }))
     try {
-      const headers = { 'Content-Type': 'application/json' }
-      let body, url
-      if (p.provider === 'anthropic') {
-        url = 'https://api.anthropic.com/v1/messages'
-        headers['x-api-key'] = p.apiKey; headers['anthropic-version'] = '2023-06-01'
-        body = JSON.stringify({ model: p.model || 'claude-haiku-4-5', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] })
-      } else {
-        url = p.provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : 'https://api.perplexity.ai/chat/completions'
-        headers['Authorization'] = `Bearer ${p.apiKey}`
-        body = JSON.stringify({ model: p.model, max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] })
-      }
-      const r = await fetch(url, { method: 'POST', headers, body })
-      setTestResult(res => ({ ...res, [slot]: r.ok ? { ok: true, msg: '✓ Connected' } : { ok: false, msg: `Error ${r.status}` } }))
+      const r = await fetch('/api/test-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: p.provider || 'anthropic', apiKey: p.apiKey, model: p.model }),
+      })
+      const data = await r.json()
+      setTestResult(res => ({ ...res, [slot]: data.ok ? { ok: true, msg: '✓ Connected' } : { ok: false, msg: data.msg || `Error ${data.status}` } }))
     } catch (err) { setTestResult(res => ({ ...res, [slot]: { ok: false, msg: err.message } })) }
     setTesting(t => ({ ...t, [slot]: false }))
   }
