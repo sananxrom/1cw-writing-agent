@@ -66,7 +66,7 @@ export default function Settings() {
 
 // ── Sources ─────────────────────────────────────────────
 function SourcesTab() {
-  const [sources, setSources] = useState(storage.getSources)
+  const [sources, setSources] = useState([])
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState({})
 
@@ -365,7 +365,7 @@ function PromptsTab() {
 
 // ── Authors ──────────────────────────────────────────────
 function AuthorsTab() {
-  const [authors, setAuthors] = useState(storage.getAuthors)
+  const [authors, setAuthors] = useState([])
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState({})
 
@@ -423,7 +423,7 @@ function AuthorsTab() {
 
 // ── Schedule ─────────────────────────────────────────────
 function ScheduleTab() {
-  const [settings, setSettings] = useState(storage.getSettings)
+  const [settings, setSettings] = useState({})
   const u = (k, v) => { const n = { ...settings, [k]: v }; setSettings(n); storage.setSettings(n) }
 
   return (
