@@ -1,5 +1,5 @@
 // pages/youtube.js — matching design YouTubePage
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import ArticleEditor from '../components/ArticleEditor'
 import { Topbar, Btn, I, Switch, TextInput, Spinner, Badge } from '../components/UI'
@@ -10,7 +10,8 @@ export default function YouTube() {
   const [singleUrl, setSingleUrl] = useState('')
   const [processing, setProcessing] = useState(false)
   const [editingArticle, setEditingArticle] = useState(null)
-  const sources = storage.getSources().filter(s => s.type === 'youtube')
+  const [sources, setSources] = useState([])
+  useEffect(() => { storage.getSources().then(s => setSources(Array.isArray(s) ? s.filter(s => s.type === 'youtube') : [])).catch(() => {}) }, [])
 
   async function handleSingle() {
     if (!singleUrl.trim()) return
@@ -19,7 +20,7 @@ export default function YouTube() {
       const videoId = singleUrl.match(/(?:v=|youtu\.be\/)([^&\s]+)/)?.[1]
       if (!videoId) throw new Error('Invalid YouTube URL')
       const transcript = await getTranscript(videoId)
-      const settings = storage.getSettings()
+      const settings = await storage.getSettings().catch(() => ({}))
       const article = await generateArticle({
         content: transcript.text || '',
         title: transcript.title || 'YouTube Video',
