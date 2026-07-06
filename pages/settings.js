@@ -72,14 +72,18 @@ function SourcesTab() {
   const [form, setForm] = useState({})
 
   function save() {
-    const updated = editing === 'new'
-      ? [...sources, { ...form, id: 's' + Date.now(), active: true }]
-      : sources.map(s => s.id === editing ? { ...s, ...form } : s)
     if (sourceSaving) return
     setSourceSaving(true)
+    const newSrc = editing === 'new'
+      ? { ...form, id: 's' + Date.now(), active: true }
+      : { ...sources.find(s => s.id === editing), ...form }
+    const updated = editing === 'new'
+      ? [...sources, newSrc]
+      : sources.map(s => s.id === editing ? newSrc : s)
     setSources(updated)
-    const target = updated.find(s => s.id === editing.id) || editing
-    storage.saveSource(target).then(() => { setEditing(null); setSourceSaving(false) }).catch(() => { setEditing(null); setSourceSaving(false) })
+    storage.saveSource(newSrc)
+      .then(() => { setEditing(null); setSourceSaving(false) })
+      .catch(err => { console.error('save failed', err); setSourceSaving(false) })
   }
   function del(id) { const u = sources.filter(s => s.id !== id); setSources(u); storage.deleteSource(id).catch(() => {}) }
   function startEdit(src) { setForm({ ...src }); setEditing(src.id) }
