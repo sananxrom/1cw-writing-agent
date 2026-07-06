@@ -6,9 +6,13 @@ export default async function handler(req, res) {
 
   const { endpoint, method = 'GET', body } = req.body
 
-  const wpUrl = process.env.WP_URL?.replace(/\/$/, '')
-  const wpUser = process.env.WP_USER
-  const wpPassword = process.env.WP_PASSWORD
+  // Profile slot: '1' (default) or '2' — different WP author credentials
+  const slot = req.body.profileSlot || '1'
+  const suffix = slot === '2' ? '_2' : ''
+
+  const wpUrl = (process.env[`WP_URL${suffix}`] || process.env.WP_URL)?.replace(/\/$/, '')
+  const wpUser = process.env[`WP_USER${suffix}`] || process.env.WP_USER
+  const wpPassword = process.env[`WP_PASSWORD${suffix}`] || process.env.WP_PASSWORD
 
   if (!wpUrl || !wpUser || !wpPassword) {
     return res.status(500).json({ error: 'WordPress credentials not configured in environment variables' })
