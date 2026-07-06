@@ -82,31 +82,39 @@ async function fetchScrape(source) {
 
 
 async function resolveYouTubeChannelId(url) {
-  // Try to extract channel_id from URL directly
-  const channelMatch = url.match(/youtube\.com\/channel\/([A-Za-z0-9_-]+)/)
+  // Direct channel ID in URL
+  const channelMatch = url.match(/youtube\.com\/channel\/([A-Za-z0-9_-]{20,})/)
   if (channelMatch) return channelMatch[1]
 
-  // For @handle or /c/ — fetch channel page and extract channel_id from canonical link or meta
-  const channelUrl = url.includes('youtube.com') ? url : `https://www.youtube.com/${url}`
-  const r = await fetch(channelUrl.replace(/\/$/, ''), {
-    headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9' }
+  // Fetch channel page with proper browser headers
+  const channelUrl = url.includes('youtube.com') ? url.replace(/\/$/, '') : `https://www.youtube.com/${url}`
+  const r = await fetch(channelUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml',
+      'Accept-Language': 'en-US,en;q=0.9',
+    }
   })
-  if (!r.ok) throw new Error(`YouTube channel fetch ${r.status}`)
+  if (!r.ok) throw new Error(`YouTube channel page ${r.status}`)
   const html = await r.text()
 
-  // Try canonical URL
-  const canonical = html.match(/\"canonicalBaseUrl\":\"(\/channel\/[A-Za-z0-9_-]+)\"/)
-  if (canonical) return canonical[1].replace('/channel/', '')
+  // Multiple patterns — try all
+  const patterns = [
+    /"channelId":"([A-Za-z0-9_-]{20,})"/,
+    /"externalId":"([A-Za-z0-9_-]{20,})"/,
+    /\/channel\/([A-Za-z0-9_-]{20,})"/,
+    /"browseId":"([A-Za-z0-9_-]{20,})"/,
+  ]
+  for (const p of patterns) {
+    const m = html.match(p)
+    if (m?.[1] && m[1].startsWith('UC')) return m[1]
+  }
 
-  // Try og:url
-  const og = html.match(/content=\"https:\/\/www\.youtube\.com\/channel\/([A-Za-z0-9_-]+)\"/)
-  if (og) return og[1]
+  // Last resort: look for any UCxxxxxxx pattern
+  const ucMatch = html.match(/UC[A-Za-z0-9_-]{21,}/)
+  if (ucMatch) return ucMatch[0]
 
-  // Try externalId
-  const ext = html.match(/"externalId":"([A-Za-z0-9_-]+)"/)
-  if (ext) return ext[1]
-
-  throw new Error('Could not resolve YouTube channel ID from URL')
+  throw new Error(`Could not resolve channel ID from ${url} (html length: ${html.length})`)
 }
 
 async function fetchYouTube(source) {
