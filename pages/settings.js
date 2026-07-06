@@ -243,7 +243,11 @@ function ModelsTab() {
   const PROVIDER_OPTIONS = [
     { value: 'anthropic', label: 'Anthropic' },
     { value: 'openai',    label: 'OpenAI' },
-    { value: 'perplexity',label: 'Perplexity' },
+    { value: 'perplexity', label: 'Perplexity' },
+    { value: 'qwen',      label: 'Qwen (Alibaba)' },
+    { value: 'groq',      label: 'Groq' },
+    { value: 'gemini',    label: 'Gemini' },
+    { value: 'ollama',    label: 'Ollama (local)' },
   ]
 
   function update(slot, patch) {
