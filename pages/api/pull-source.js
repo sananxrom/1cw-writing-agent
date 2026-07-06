@@ -81,90 +81,76 @@ async function fetchScrape(source) {
 }
 
 
-async function fetchYouTube(source) {
-  // Scrape YouTube channel page for latest videos — no API needed
-  const url = source.url.trim()
-  // Normalize: handle @handle, /channel/, /c/ formats
+async function resolveYouTubeChannelId(url) {
+  // Try to extract channel_id from URL directly
+  const channelMatch = url.match(/youtube\.com\/channel\/([A-Za-z0-9_-]+)/)
+  if (channelMatch) return channelMatch[1]
+
+  // For @handle or /c/ — fetch channel page and extract channel_id from canonical link or meta
   const channelUrl = url.includes('youtube.com') ? url : `https://www.youtube.com/${url}`
-  
-  const response = await fetch(channelUrl + '/videos', {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
+  const r = await fetch(channelUrl.replace(/\/$/, ''), {
+    headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9' }
   })
-  if (!response.ok) throw new Error(`YouTube fetch HTTP ${response.status}`)
-  const html = await response.text()
-  
-  const videos = []
-  
-  // YouTube embeds video data in ytInitialData JSON
-  const match = html.match(/var ytInitialData = ({.+?});<\/script>/)
-  if (match) {
-    try {
-      const data = JSON.parse(match[1])
-      // Navigate the nested structure to find video items
-      const tabs = data?.contents?.twoColumnBrowseResultsRenderer?.tabs || []
-      for (const tab of tabs) {
-        const tabContent = tab?.tabRenderer?.content?.richGridRenderer?.contents || 
-                          tab?.tabRenderer?.content?.sectionListRenderer?.contents || []
-        for (const section of tabContent) {
-          const items = section?.richItemRenderer ? [section.richItemRenderer] :
-                       section?.itemSectionRenderer?.contents || []
-          for (const item of items) {
-            const video = item?.content?.videoRenderer || item?.videoRenderer
-            if (!video?.videoId) continue
-            const videoId = video.videoId
-            const title = video.title?.runs?.[0]?.text || video.title?.simpleText || ''
-            const thumb = video.thumbnail?.thumbnails?.slice(-1)[0]?.url || ''
-            const description = video.descriptionSnippet?.runs?.map(r => r.text).join('') || ''
-            const publishedText = video.publishedTimeText?.simpleText || ''
-            videos.push({
-              url: `https://www.youtube.com/watch?v=${videoId}`,
-              title,
-              summary: description || `Watch on YouTube: ${title}`,
-              image: (thumb || '').split('?')[0].replace('hqdefault', 'mqdefault') || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-              content: '',
-              pubDate: null, // YouTube doesn't give exact dates easily
-              sourceId: source.id,
-              sourceName: source.name,
-              sourceType: 'youtube',
-            })
-            if (videos.length >= (source.maxArticles || 10)) break
-          }
-          if (videos.length >= (source.maxArticles || 10)) break
-        }
-        if (videos.length) break
-      }
-    } catch (parseErr) {
-      console.error('[pull-source] YouTube parse error:', parseErr.message)
-    }
+  if (!r.ok) throw new Error(`YouTube channel fetch ${r.status}`)
+  const html = await r.text()
+
+  // Try canonical URL
+  const canonical = html.match(/\"canonicalBaseUrl\":\"(\/channel\/[A-Za-z0-9_-]+)\"/)
+  if (canonical) return canonical[1].replace('/channel/', '')
+
+  // Try og:url
+  const og = html.match(/content=\"https:\/\/www\.youtube\.com\/channel\/([A-Za-z0-9_-]+)\"/)
+  if (og) return og[1]
+
+  // Try externalId
+  const ext = html.match(/"externalId":"([A-Za-z0-9_-]+)"/)
+  if (ext) return ext[1]
+
+  throw new Error('Could not resolve YouTube channel ID from URL')
+}
+
+async function fetchYouTube(source) {
+  const url = source.url.trim()
+  const max = source.maxArticles || 10
+
+  // Resolve channel ID
+  let channelId
+  try {
+    channelId = await resolveYouTubeChannelId(url)
+  } catch (e) {
+    console.error('[pull-source] YouTube channel ID resolve failed:', e.message)
+    return []
   }
-  
-  // Fallback: scrape og:title links if ytInitialData parse failed
-  if (!videos.length) {
-    const $2 = cheerio.load(html)
-    $2('a[href*="/watch?v="]').each((_, el) => {
-      const href = $2(el).attr('href')
-      const title = $2(el).attr('title') || $2(el).text().trim()
-      if (!href || !title || title.length < 5) return
-      const videoId = href.match(/v=([^&]+)/)?.[1]
-      if (!videoId || videos.find(v => v.url.includes(videoId))) return
-      videos.push({
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-        title,
-        summary: `YouTube video: ${title}`,
-        image: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-        content: '',
-        pubDate: null,
-        sourceId: source.id,
-        sourceName: source.name,
-        sourceType: 'youtube',
-      })
-      if (videos.length >= (source.maxArticles || 10)) return false
+
+  // YouTube RSS feed — official, no API key, no scraping
+  const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`
+  const r = await fetch(rssUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/atom+xml,application/xml,text/xml' }
+  })
+  if (!r.ok) throw new Error(`YouTube RSS ${r.status}`)
+  const xml = await r.text()
+
+  // Parse Atom feed manually (no xml parser needed)
+  const entries = xml.split('<entry>').slice(1)
+  const videos = []
+  for (const entry of entries.slice(0, max)) {
+    const videoId = entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/)?.[1]
+    const title = entry.match(/<title>([^<]+)<\/title>/)?.[1]?.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>') || ''
+    const published = entry.match(/<published>([^<]+)<\/published>/)?.[1]
+    const description = entry.match(/<media:description>([\s\S]*?)<\/media:description>/)?.[1]?.trim().slice(0, 300) || ''
+    if (!videoId || !title) continue
+    videos.push({
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+      title,
+      summary: description || `Watch: ${title}`,
+      image: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+      content: '',
+      pubDate: published || null,
+      sourceId: source.id,
+      sourceName: source.name,
+      sourceType: 'youtube',
     })
   }
-  
   return videos
 }
 
