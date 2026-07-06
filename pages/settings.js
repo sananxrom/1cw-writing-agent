@@ -67,6 +67,7 @@ export default function Settings() {
 // ── Sources ─────────────────────────────────────────────
 function SourcesTab() {
   const [sources, setSources] = useState([])
+  const [sourceSaving, setSourceSaving] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState({})
 
@@ -74,9 +75,13 @@ function SourcesTab() {
     const updated = editing === 'new'
       ? [...sources, { ...form, id: 's' + Date.now(), active: true }]
       : sources.map(s => s.id === editing ? { ...s, ...form } : s)
-    setSources(updated); storage.setSources(updated); setEditing(null)
+    if (sourceSaving) return
+    setSourceSaving(true)
+    setSources(updated)
+    const target = updated.find(s => s.id === editing.id) || editing
+    storage.saveSource(target).then(() => { setEditing(null); setSourceSaving(false) }).catch(() => { setEditing(null); setSourceSaving(false) })
   }
-  function del(id) { const u = sources.filter(s => s.id !== id); setSources(u); storage.setSources(u) }
+  function del(id) { const u = sources.filter(s => s.id !== id); setSources(u); storage.deleteSource(id).catch(() => {}) }
   function startEdit(src) { setForm({ ...src }); setEditing(src.id) }
   function startNew() { setForm({ name: '', url: '', type: 'rss', active: true, maxArticles: 10, primaryCategory: '' }); setEditing('new') }
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
@@ -121,7 +126,8 @@ function SourcesTab() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-          <Btn variant="primary" onClick={save}>Save source</Btn>
+          <Btn variant="primary" onClick={save} disabled={sourceSaving}>{sourceSaving ? "Saving…" : "Save source"}</Btn>
+          <span id="source-save-status" style={{fontSize:11,color:"var(--muted)",fontFamily:"var(--mono)"}}></span>
           <Btn variant="secondary" onClick={() => setEditing(null)}>Cancel</Btn>
         </div>
       </div>
@@ -152,7 +158,7 @@ function SourcesTab() {
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{s.primaryCategory || '—'}</span>
             <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--muted)' }}>{s.maxArticles || 10}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={e => e.stopPropagation()}>
-              <Switch checked={!!s.active} onChange={v => { const u = sources.map(x => x.id === s.id ? {...x, active: v} : x); setSources(u); storage.setSources(u) }} />
+              <Switch checked={!!s.active} onChange={v => { const updated = {...s, active: v}; setSources(prev => prev.map(x => x.id === s.id ? updated : x)); storage.saveSource(updated).catch(()=>{}) }} />
               <Btn variant="ghost" size="xs" onClick={e => { e.stopPropagation(); if (confirm('Delete ' + s.name + '?')) del(s.id) }}><I name="trash" size={12} color="var(--danger)" /></Btn>
             </div>
           </div>
