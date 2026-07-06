@@ -556,7 +556,7 @@ ${tr.transcript}` : ''
       {/* Page loading overlay */}
       {pageLoading && (
         <div style={{ position: 'fixed', inset: 0, background: 'var(--bg)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--ink)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>1cw</div>
+          <img src="/logo.svg" alt="1CW" style={{ width: 40, height: 40, objectFit: 'contain' }} />
           <Spinner size={18} />
           <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>Loading workspace…</div>
         </div>
