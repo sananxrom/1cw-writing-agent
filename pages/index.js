@@ -257,11 +257,27 @@ export default function Discover() {
         try {
           if (idx > 0) await new Promise(r => setTimeout(r, settings.batchDelay ?? 600))
           let content = item.content || item.summary || ''
-          try {
-            const scraped = await scrapeArticle(item.url)
-            if (scraped.text?.length > content.length) content = scraped.text
-            if (!item.image && scraped.image) item.image = scraped.image
-          } catch {}
+          if (item.sourceType === 'youtube') {
+            // Fetch transcript for YouTube videos
+            try {
+              const videoId = item.url.match(/[?&]v=([^&]+)/)?.[1]
+              if (videoId) {
+                const tr = await fetch('/api/yt-transcript', {
+                  method: 'POST', headers: {'Content-Type':'application/json'},
+                  body: JSON.stringify({ videoId })
+                }).then(r=>r.json())
+                if (tr.transcript?.length > 100) {
+                  content = `Video Title: ${item.title}\n\nTranscript:\n${tr.transcript}`
+                }
+              }
+            } catch {}
+          } else {
+            try {
+              const scraped = await scrapeArticle(item.url)
+              if (scraped.text?.length > content.length) content = scraped.text
+              if (!item.image && scraped.image) item.image = scraped.image
+            } catch {}
+          }
 
           const authorObj = storage.getAuthors().find(a => a.id === src?.defaultAuthor)
           const isYT = item.sourceType === 'youtube'
