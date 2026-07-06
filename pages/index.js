@@ -70,23 +70,47 @@ export default function Discover() {
   const toast = msg => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 2500) }
 
   useEffect(() => {
-    const gen = loadGenerated()
-    if (gen.length) setGenerated(gen)
+    // Load generated queue from DB (shared between users)
+    storage.getGeneratedQueue().then(items => {
+      if (items.length) {
+        items.forEach(g => { if (g.article) fullArticles.current[g.item?.url || g.id] = g.article })
+        setGenerated(items)
+      }
+    }).catch(() => {
+      // DB failed — fall back to localStorage
+      const gen = loadGenerated()
+      if (gen.length) setGenerated(gen)
+    })
     loadSources()
     document.addEventListener('visibilitychange', loadSources)
     return () => document.removeEventListener('visibilitychange', loadSources)
   }, [])
 
-  useEffect(() => { saveGeneratedLocal(generated) }, [generated])
+  useEffect(() => {
+    saveGeneratedLocal(generated) // keep localStorage as fast local cache
+    // Sync to DB for sharing — debounced
+    if (typeof window !== 'undefined') {
+      clearTimeout(window._genSyncTimer)
+      window._genSyncTimer = setTimeout(() => {
+        generated.forEach(g => {
+          if (g.status === 'done' || g.status === 'error') {
+            storage.saveGenerated(g).catch(() => {})
+          }
+        })
+      }, 2000)
+    }
+  }, [generated])
 
   // Load WP history when switching to drafted/published tabs
   useEffect(() => {
     if (tab === 'drafted' || tab === 'published') loadWpHistory()
   }, [tab])
 
-  function loadSources() {
-    const s = storage.getSources().filter(s => ['rss','scrape','youtube'].includes(s.type) && s.active)
-    setSources(s)
+  async function loadSources() {
+    try {
+      const s = await storage.getSources()
+      setSources(Array.isArray(s) ? s.filter(s => ['rss','scrape','youtube'].includes(s.type) && s.active) : [])
+    } catch { setSources([]) }
   }
 
   async function loadWpHistory() {
@@ -159,6 +183,8 @@ export default function Discover() {
       await deletePulledFromDB(urls).catch(() => {})
       setPulled(prev => prev.filter(p => !urls.includes(p.url)))
     } else if (fromTab === 'generated') {
+      const ids = generated.filter(g => urls.includes(g.item?.url || g.item?.link)).map(g => g.id).filter(Boolean)
+      storage.deleteGenerated(ids).catch(() => {})
       setGenerated(prev => prev.filter(g => !urls.includes(g.item?.url || g.item?.link)))
     } else if (fromTab === 'saved') {
       urls.forEach(k => localStorage.removeItem(k))
@@ -197,7 +223,7 @@ export default function Discover() {
   async function generate(urls) {
     if (!urls.length || generatingRef.current) return
     generatingRef.current = true
-    const settings = storage.getSettings()
+    const settings = await storage.getSettings().catch(() => ({}))
     const toGenerate = urls.map(url => ({ url, item: pulled.find(i => i.url === url) })).filter(x => x.item)
 
     setGenerated(prev => [
@@ -263,7 +289,7 @@ export default function Discover() {
     setGenerated(prev => prev.map(x =>
       (x.item?.url || x.item?.link) === url ? { ...x, status: 'generating', error: null, generatedAt: Date.now() } : x
     ))
-    const settings = storage.getSettings()
+    const settings = await storage.getSettings().catch(() => ({}))
     const item = g.item
     const src = sources.find(s => s.id === item.sourceId)
     try {
@@ -331,7 +357,6 @@ export default function Discover() {
 
   function handleDocImport(selectedIndices) {
     const toImport = selectedIndices.map(i => docPreview[i]).filter(Boolean)
-    const settings = storage.getSettings()
     const newGenerated = toImport.map((article, i) => {
       const fakeUrl = `doc-${Date.now()}-${i}-${(article.title || '').slice(0, 20).replace(/\s+/g, '-')}`
       const fakeItem = {
@@ -380,7 +405,7 @@ export default function Discover() {
   async function handleCreate() {
     setCreateGenerating(true)
     try {
-      const settings = storage.getSettings()
+      const settings = await storage.getSettings().catch(() => ({}))
       let content = createPaste
       let title = createTopic
       if (createMode === 'url' && createUrl) {
