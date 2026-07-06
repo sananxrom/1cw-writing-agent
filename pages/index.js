@@ -151,12 +151,13 @@ export default function Discover() {
 
   const generatedUrls = useMemo(() => new Set(generated.map(g => g.item?.url || g.item?.link)), [generated])
 
+  const sourceIds = useMemo(() => new Set(sources.map(s => s.id)), [sources])
   const displayPulled = useMemo(() => {
     let items = (activeSource === 'all' ? pulled : pulled.filter(p => p.sourceId === activeSource))
-      .filter(p => !generatedUrls.has(p.url) && !seenUrls.has(p.url))
+      .filter(p => !generatedUrls.has(p.url) && !seenUrls.has(p.url) && (activeSource !== 'all' || sourceIds.has(p.sourceId)))
     if (search) items = items.filter(i => i.title?.toLowerCase().includes(search.toLowerCase()))
     return items
-  }, [pulled, activeSource, generatedUrls, seenUrls, search])
+  }, [pulled, activeSource, generatedUrls, seenUrls, search, sourceIds])
 
   const displayGenerated = useMemo(() => {
     let items = generated.filter(g => g.status === 'done' && !g.article?.wpPostId)
