@@ -563,9 +563,15 @@ export default function Discover() {
               </Btn>
             </>}
             {selected.length > 0 && tab === 'pulled' && (
-              <Btn variant="accent" size="sm" leftIcon={<I name="sparkle" size={13} />} onClick={() => generate(selected)}>
-                Generate {selected.length}
-              </Btn>
+              <div style={{display:'flex',gap:6}}>
+                <Btn variant="accent" size="sm" leftIcon={<I name="sparkle" size={13} />} onClick={() => generate(selected)}>
+                  Generate {selected.length}
+                </Btn>
+                <Btn variant="danger" size="sm" onClick={() => askDelete(selected, 'pulled')}>
+                  Delete {selected.length}
+                </Btn>
+                <button onClick={() => { setSelected([]); setBulk([]) }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:13}}>✕</button>
+              </div>
             )}
             {bulk.length > 0 && tab === 'generated' && (
               <div style={{ display: 'flex', gap: 6 }}>
