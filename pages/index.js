@@ -208,7 +208,17 @@ export default function Discover() {
   async function quickSave(urls, status) {
     setBulkWorking(true)
     setSavingUrls(prev => { const n={...prev}; urls.forEach(u=>n[u]=status); return n })
-    const cache = storage.getWPCache()
+    // Always fetch fresh WP categories/tags for current user
+    const cache = { categories: [], tags: [] }
+    try {
+      const slot = storage.getProfile()?.slot || '1'
+      const [catRes, tagRes] = await Promise.all([
+        fetch('/api/wordpress', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'categories?per_page=100',method:'GET',profileSlot:slot})}),
+        fetch('/api/wordpress', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'tags?per_page=100',method:'GET',profileSlot:slot})}),
+      ])
+      const cats = await catRes.json(); if(Array.isArray(cats)) cache.categories = cats
+      const tags = await tagRes.json(); if(Array.isArray(tags)) cache.tags = tags
+    } catch {}
     for (const url of urls) {
       const g = generated.find(x => (x.item?.url || x.item?.link) === url)
       if (!g?.article) continue
