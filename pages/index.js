@@ -33,6 +33,7 @@ export default function Discover() {
   const [selected, setSelected] = useState([])
   const [bulk, setBulk] = useState([])
   const [generated, setGenerated] = useState([])
+  const safeGenerated = Array.isArray(generated) ? generated : []
   const [wpHistory, setWpHistory] = useState([])    // drafted + published from DB
   const [pageLoading, setPageLoading] = useState(true)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -77,6 +78,7 @@ export default function Discover() {
     setPageLoading(true)
     migrateLocalToDb().catch(() => {})
     storage.getGeneratedQueue().then(items => {
+      if (!Array.isArray(items)) return
       if (items.length) {
         items.forEach(g => { if (g.article) fullArticles.current[g.item?.url || g.id] = g.article })
         setGenerated(items)
@@ -220,7 +222,7 @@ export default function Discover() {
       const tags = await tagRes.json(); if(Array.isArray(tags)) cache.tags = tags
     } catch {}
     for (const url of urls) {
-      const g = generated.find(x => (x.item?.url || x.item?.link) === url)
+      const g = (Array.isArray(generated)?generated:[]).find(x => (x.item?.url || x.item?.link) === url)
       if (!g?.article) continue
       const full = fullArticles.current[url] || g.article
       try {
@@ -326,7 +328,7 @@ export default function Discover() {
   }
 
   async function retryGeneration(url) {
-    const g = generated.find(x => (x.item?.url || x.item?.link) === url)
+    const g = (Array.isArray(generated)?generated:[]).find(x => (x.item?.url || x.item?.link) === url)
     if (!g) return
     setGenerated(prev => prev.map(x =>
       (x.item?.url || x.item?.link) === url ? { ...x, status: 'generating', error: null, generatedAt: Date.now() } : x
