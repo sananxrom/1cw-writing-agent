@@ -181,13 +181,15 @@ function WordPressTab() {
   const [testing, setTesting] = useState(false)
   const [status, setStatus] = useState(null)
   const [syncMsg, setSyncMsg] = useState('')
+  const profileSlot = typeof window !== 'undefined' ? (storage.getProfile()?.slot || '1') : '1'
+  const profileName = typeof window !== 'undefined' ? (storage.getProfile()?.name || '') : ''
 
   async function testConnection() {
     setTesting(true); setStatus(null)
     try {
-      const r = await fetch('/api/wordpress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'users/me', method: 'GET' }) })
+      const r = await fetch('/api/wordpress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: 'users/me', method: 'GET', profileSlot }) })
       const d = await r.json()
-      if (r.ok) setStatus({ ok: true, msg: `Connected as ${d.name} (${d.roles?.join(', ')})` })
+      if (r.ok) setStatus({ ok: true, msg: `Connected as ${d.name} · Profile: ${profileName} (slot ${profileSlot})` })
       else setStatus({ ok: false, msg: d.error || 'Connection failed' })
     } catch (err) { setStatus({ ok: false, msg: err.message }) }
     setTesting(false)
@@ -197,8 +199,8 @@ function WordPressTab() {
     setSyncMsg('Syncing…')
     try {
       const [cats, tags, users] = await Promise.all([
-        fetch('/api/wordpress', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ endpoint: 'categories?per_page=100', method: 'GET' }) }).then(r => r.json()),
-        fetch('/api/wordpress', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ endpoint: 'tags?per_page=100', method: 'GET' }) }).then(r => r.json()),
+        fetch('/api/wordpress', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ endpoint: 'categories?per_page=100', method: 'GET', profileSlot }) }).then(r => r.json()),
+        fetch('/api/wordpress', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ endpoint: 'tags?per_page=100', method: 'GET', profileSlot }) }).then(r => r.json()),
         fetch('/api/wordpress', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ endpoint: 'users?per_page=50', method: 'GET' }) }).then(r => r.json()),
       ])
       storage.setWPCache({ categories: Array.isArray(cats) ? cats : [], tags: Array.isArray(tags) ? tags : [], users: Array.isArray(users) ? users : [] })
