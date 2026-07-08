@@ -21,6 +21,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
   const [regenLoading, setRegenLoading] = useState({})
+  const [wpAuthors, setWpAuthors] = useState([])
   const [pixabayImages, setPixabayImages] = useState([])
   const [pixabayLoading, setPixabayLoading] = useState(false)
   const [pixabayQuery, setPixabayQuery] = useState('')
@@ -30,7 +31,8 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
   const fileInputRef = useRef()
 
   useEffect(() => {
-    const cache = storage.getWPCache()
+    storage.getAuthors().then(a => setWpAuthors(Array.isArray(a) ? a : [])).catch(() => {})
+    const cache = storage.getWPCache() || {}
     setWpCache(cache)
     if (!pixabayQuery && article.title) {
       setPixabayQuery(article.focusKeyword || article.title.split(' ').slice(0, 3).join(' '))
@@ -42,7 +44,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
   const handleRegen = async (field, instruction) => {
     setRegenLoading(prev => ({ ...prev, [field]: true }))
     try {
-      const settings = storage.getSettings()
+      const settings = await storage.getSettings().catch(() => ({}))
       const result = await generateArticle({
         regenerateField: field,
         regenerateInstruction: instruction,
@@ -168,8 +170,8 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
       const tagIds = await resolveTagIds(allTags, wpTags || [])
 
       // Get author ID
-      const authors = storage.getAuthors()
-      const authorObj = authors.find(a => a.id === article.authorId) || authors[0]
+      const authors = await storage.getAuthors().catch(() => [])
+      const authorObj = (Array.isArray(authors) ? authors : []).find(a => a.id === article.authorId)
       const authorId = authorObj?.wpUserId || undefined
 
       const post = await saveToWordPress(
@@ -593,7 +595,7 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
               <select value={article.authorId || ''} onChange={e => set('authorId', e.target.value)}
                 style={selectStyle}>
                 <option value="">— Default —</option>
-                {storage.getAuthors().map(a => (
+                {(wpAuthors || []).map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
