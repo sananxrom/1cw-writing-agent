@@ -145,13 +145,27 @@ export default function ArticleEditor({ article: initialArticle, onSaved, onBack
         }
       }
 
+      // Fetch fresh WP cache for current user (handles multi-user)
+      let { categories: wpCats, tags: wpTags } = cache
+      if (!Array.isArray(wpCats) || !wpCats.length) {
+        try {
+          const slot = storage.getProfile()?.slot || '1'
+          const [cr, tr] = await Promise.all([
+            fetch('/api/wordpress', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'categories?per_page=100',method:'GET',profileSlot:slot})}),
+            fetch('/api/wordpress', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'tags?per_page=100',method:'GET',profileSlot:slot})}),
+          ])
+          const c = await cr.json(); if (Array.isArray(c)) wpCats = c
+          const t = await tr.json(); if (Array.isArray(t)) wpTags = t
+        } catch {}
+      }
+
       // Resolve categories
       const allCats = [article.primaryCategory, ...(article.additionalCategories || [])].filter(Boolean)
-      const categoryIds = await resolveCategoryIds(allCats, cache.categories)
+      const categoryIds = await resolveCategoryIds(allCats, wpCats || [])
 
       // Resolve tags
       const allTags = [...(article.regionTags || []), ...(article.keywordTags || [])]
-      const tagIds = await resolveTagIds(allTags, cache.tags)
+      const tagIds = await resolveTagIds(allTags, wpTags || [])
 
       // Get author ID
       const authors = storage.getAuthors()
