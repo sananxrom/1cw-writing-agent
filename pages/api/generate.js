@@ -10,6 +10,12 @@ export const config = { maxDuration: 60 }
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  // Health ping
+  if (req.body._ping) {
+    const hasKey = !!(process.env.ANTHROPIC_API_KEY)
+    return res.json({ ok: true, hasEnvKey: hasKey })
+  }
+
   const {
     content, title, sourceUrl, sourceName, primaryCategory,
     writingPrompt, authorStyle, postFormat, mode,
@@ -24,11 +30,17 @@ export default async function handler(req, res) {
 
   // Resolve keys — frontend passes provider configs, fall back to env
   const fallbackKey = process.env.ANTHROPIC_API_KEY
-  const writingProvider = wpOverride || { provider, model, apiKey: apiKey || fallbackKey }
-  const editingProvider = epOverride || writingProvider
+  const DEFAULT_MODEL = 'claude-sonnet-4-6'
+  const DEFAULT_EDIT_MODEL = 'claude-haiku-4-5-20251001'
+  const writingProvider = wpOverride
+    ? { ...wpOverride, model: wpOverride.model || DEFAULT_MODEL, apiKey: wpOverride.apiKey || fallbackKey }
+    : { provider: provider || 'anthropic', model: model || DEFAULT_MODEL, apiKey: apiKey || fallbackKey }
+  const editingProvider = epOverride
+    ? { ...epOverride, model: epOverride.model || DEFAULT_EDIT_MODEL, apiKey: epOverride.apiKey || fallbackKey }
+    : { ...writingProvider, model: writingProvider.model === DEFAULT_MODEL ? DEFAULT_EDIT_MODEL : writingProvider.model }
 
   if (!writingProvider.apiKey) {
-    return res.status(500).json({ error: 'No API key provided. Add one in Settings → AI Providers.' })
+    return res.status(500).json({ error: 'No API key provided. Add one in Settings → Models, or ask admin to set ANTHROPIC_API_KEY in Vercel env.' })
   }
 
   // Batch delay — prevent hammering APIs
