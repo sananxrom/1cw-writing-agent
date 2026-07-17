@@ -49,6 +49,7 @@ export default function Discover() {
   const [bulkWorking, setBulkWorking] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [toastMsg, setToastMsg] = useState('')
+  const [errors, setErrors] = useState([])  // persistent errors with actions
   // Create mode state
   const [createMode, setCreateMode] = useState('url')
   const [createUrl, setCreateUrl] = useState('')
@@ -72,11 +73,27 @@ export default function Discover() {
   const fullArticles = useRef({})
 
   const toast = msg => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 2500) }
+  const addError = (id, msg, action) => setErrors(prev => prev.find(e=>e.id===id) ? prev : [...prev, { id, msg, action }])
+  const clearError = id => setErrors(prev => prev.filter(e => e.id !== id))
 
   useEffect(() => {
     // Load generated queue from DB (shared between users)
     setPageLoading(true)
     migrateLocalToDb().catch(() => {})
+
+    // Check AI config on load
+    if (typeof window !== 'undefined') {
+      const providers = JSON.parse(localStorage.getItem('1cw_ai_providers') || '{}')
+      const hasKey = providers.writing?.apiKey || providers.editing?.apiKey
+      if (!hasKey) {
+        // Check if env key exists via a lightweight ping
+        fetch('/api/generate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ _ping: true }) })
+          .then(r => r.json())
+          .then(d => { if (d.error?.includes('No API key')) addError('no-api-key', 'No AI API key configured. Go to Settings → Models to add your key.', '/settings') })
+          .catch(() => {})
+      }
+    }
+
     storage.getGeneratedQueue().then(items => {
       if (!Array.isArray(items)) return
       if (items.length) {
@@ -492,7 +509,14 @@ ${tr.transcript}` : ''
       setTab('generated')
       setCreateUrl(''); setCreateTopic(''); setCreatePaste(''); setCreateInstruction('')
       toast('Article created — see Generated tab')
-    } catch (err) { toast('Failed: ' + err.message) }
+    } catch (err) {
+      const errMsg = err.message || ''
+      if (errMsg.includes('No API key') || errMsg.includes('model') || errMsg.includes('Field required') || errMsg.includes('not valid JSON')) {
+        addError('no-api-key', 'AI model not configured. Go to Settings → Models and add your API key.', '/settings')
+      } else {
+        toast('Failed: ' + errMsg)
+      }
+    }
     setCreateGenerating(false)
   }
 
@@ -633,6 +657,24 @@ ${tr.transcript}` : ''
           </div>
         }
       />
+
+      {/* Persistent error banners */}
+      {errors.length > 0 && (
+        <div style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca', padding: '0 20px' }}>
+          {errors.map(err => (
+            <div key={err.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: errors.indexOf(err) < errors.length-1 ? '1px solid #fecaca' : 'none' }}>
+              <I name="x" size={14} color="var(--danger)" />
+              <span style={{ fontSize: 13, color: '#991b1b', flex: 1 }}>{err.msg}</span>
+              {err.action && (
+                <a href={err.action} style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none', whiteSpace: 'nowrap', padding: '4px 10px', background: 'var(--accent-soft)', borderRadius: 5 }}>
+                  Fix in Settings →
+                </a>
+              )}
+              <button onClick={() => clearError(err.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', padding: '2px 4px', fontSize: 16, lineHeight: 1 }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Tab bar */}
       <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 20px', display: 'flex', alignItems: 'center', height: 38, flexShrink: 0 }}>
